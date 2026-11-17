@@ -108,7 +108,7 @@
   function migrate(S) {
     if ((S.v || 1) < 2) {
       const age = Math.max(0, (B.now() - (S.bun.bornAt || B.now())) / 86400000);
-      S.bun.frame = Math.min(3, 1 + 2 * (1 - Math.exp(-age / 22)));
+      S.bun.frame = Math.min(3, 1 + 2 * (1 - Math.exp(-age / 45)));
       S.bun.weight = S.bun.frame;
       S.v = 2;
     }
@@ -154,8 +154,9 @@
     backup() {
       try { localStorage.setItem(BACKUP, JSON.stringify(B.S)); } catch (e) { /* bỏ qua */ }
     },
-    exportText() {
-      return JSON.stringify({ app: 'hien-nha-bun', v: 1, exportedAt: new Date().toISOString(), state: B.S }, null, 2);
+    // photos: ảnh trên tường (dạng data URL) để tệp sao lưu mang theo được cả ảnh
+    exportText(photos) {
+      return JSON.stringify({ app: 'hien-nha-bun', v: 2, exportedAt: new Date().toISOString(), state: B.S, photos: photos || [] }, null, photos && photos.length ? 0 : 2);
     },
     // Trả về trạng thái đã kiểm tra; ném lỗi tiếng Việt nếu tệp không hợp lệ
     parseImport(text) {

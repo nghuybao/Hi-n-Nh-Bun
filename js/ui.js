@@ -94,37 +94,6 @@
 
   /* ---------- Chăm sóc ---------- */
   function closePopover() { $('#popover').hidden = true; }
-  function openFeed() {
-    const S = B.S, pop = $('#popover');
-    if (!pop.hidden) return closePopover();
-    pop.innerHTML = `<h4>Hôm nay Bun ăn gì?</h4>` + B.FOODS.map((f) => {
-      const free = f.id === 'kibble' && S.coins < f.price && !S.day.freeMeal;
-      return `<button class="pop-item" data-food="${f.id}"><span><strong>${f.name}</strong><small>${f.desc}</small></span><span class="price">${free ? 'Tặng' : ic('coin') + f.price}</span></button>`;
-    }).join('');
-    pop.hidden = false;
-  }
-  function doFeed(id) {
-    closePopover();
-    const r = B.careActions.feed(id);
-    if (!r.ok) {
-      if (r.reason === 'full') B.bun.sayCat('full');
-      else if (r.reason === 'coins') toast('Chưa đủ xu. Hoàn thành một việc để mua thêm nhé.', { icon: 'coin' });
-      return;
-    }
-    B.scene.updateBowls(); B.bun.feedAnim('food');
-    if (r.free) toast('Ví đang trống nên bữa hạt hôm nay được tặng.', { icon: 'gift' });
-  }
-  function doWater() {
-    const r = B.careActions.water();
-    if (!r.ok) return B.bun.sayCat('notThirsty');
-    B.scene.updateBowls(); B.bun.feedAnim('water');
-  }
-  function doPlay() {
-    const r = B.careActions.play();
-    if (!r.ok) return B.bun.sayCat('tired');
-    B.bun.playAnim();
-  }
-
   /* ---------- Sổ công việc ---------- */
   function renderHead() {
     $('#panelHead').innerHTML = `<div class="ph-greet">${B.GREET_BY_HOUR(B.time.hour())}</div><h1 class="ph-date">${U.fmtDate(B.time.today())}</h1>`;
@@ -223,6 +192,7 @@
     const S = B.S, tab = ui.shopTab;
     let html = `<div class="row" style="margin-bottom:12px"><span class="wallet">${ic('coin')}${S.coins} xu</span><span class="hint" style="margin:0">Mỗi món mua về đều xuất hiện trong phòng.</span></div>
       <div class="seg" role="tablist">${B.SHOP_TABS.map((t) => `<button data-stab="${t.id}" class="${t.id === tab ? 'on' : ''}">${t.label}</button>`).join('')}</div>`;
+    if (tab === 'pantry' || tab === 'friends') return html + B.worldui.shopTab(tab);
     if (tab === 'house') {
       html += '<div class="house-list">' + B.HOUSE.map((h) => {
         const cur = h.level === S.house.level, own = h.level <= S.house.level, next = h.level === S.house.level + 1;
@@ -247,10 +217,12 @@
     if (tab) ui.shopTab = tab;
     const m = modal({ title: 'Cửa tiệm nhỏ', cls: 'wide' });
     const draw = () => m.render(shopHTML());
+    m.body.addEventListener("change", (e) => B.worldui.shopChange(e));
     draw();
     m.body.addEventListener('click', (e) => {
       const st = e.target.closest('[data-stab]'), buy = e.target.closest('[data-buy]'), use = e.target.closest('[data-use]');
       if (st) { ui.shopTab = st.dataset.stab; return draw(); }
+      if (B.worldui.shopClick(e, draw)) return;
       if (buy) {
         const it = B.item(buy.dataset.buy), r = B.shop.buy(it.id);
         if (!r.ok) return toast(r.reason === 'coins' ? `Còn thiếu ${it.price - B.S.coins} xu để mua ${it.name.toLowerCase()}.` : 'Chưa mua được món này.', { icon: 'coin' });
@@ -305,7 +277,8 @@
       <strong style="font-family:var(--font-h)">Thân thiết: ${bond.name}</strong><div class="meter" style="--v:${Math.round(bond.pct * 100)}"><i></i></div>
       <div class="tags">${B.traits().map((t) => `<span title="${t.desc}">${t.name}</span>`).join('')}</div>
       <div class="kv">${STAT_DEFS.map((d) => `<span style="color:${d[3]};display:grid">${ic(d[1])}</span><span><span style="font-size:12.5px">${d[2]}</span><div class="meter" style="--v:${Math.round(st[d[0]])};--c:${d[3]}"><i></i></div></span><b>${Math.round(st[d[0]])}%</b>`).join('')}</div>
-      <div class="facts"><div><b>${c.tasks}</b> việc cùng hoàn thành</div><div><b>${c.focusMin}</b> phút ngồi cùng</div><div><b>${c.pet}</b> lần vuốt ve</div><div><b>${c.play}</b> lần chơi đùa</div><div><b>${c.feed}</b> bữa ăn</div><div><b>${S.tickets}</b> vé xe về nhà</div></div>
+      <div class="facts"><div><b>${c.tasks}</b> việc cùng hoàn thành</div><div><b>${c.focusMin}</b> phút ngồi cùng</div><div><b>${c.pet}</b> lần vuốt ve</div><div><b>${c.play}</b> lần chơi đùa</div><div><b>${c.feed}</b> bữa ăn</div><div><b>${S.tickets}</b> vé xe về nhà</div><div><b>${(S.bun.weight || 1).toFixed(2).replace('.', ',')} kg</b> ${B.nutri.condition().label.toLowerCase()}</div><div><b>${B.nutri.health()}</b> điểm sức khỏe</div></div>
+      ${S.pets.length ? `<div class="tags">${S.pets.map((p) => `<span>${esc(p.name)}: ${B.pets.bondName(p.bond || 0)}</span>`).join('')}</div>` : ''}
       <p class="hint">${B.rest.activeAt(B.now()) ? 'Bà đang trông Bun, mọi chỉ số được giữ ổn định.' : limit ? `Lần chăm sóc gần nhất: ${U.fmtAway(B.now() - S.lastCareAt)} trước. Nếu vắng quá ${limit} giờ, Bun sẽ về quê ở với ông bà.` : 'Chế độ Thong thả: Bun luôn ở đây chờ bạn.'}</p>
     </div></div>` });
     const inp = $('#bunName', m.body);
@@ -332,19 +305,23 @@
   }
   function doExport() {
     B.store.saveNow();
-    const blob = new Blob([B.store.exportText()], { type: 'application/json' }), a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `hien-nha-bun-${B.time.today()}.json`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    toast('Đã xuất tệp sao lưu vào thư mục Tải xuống.', { icon: 'download' });
+    return B.photos.exportAll().then((photos) => {
+      const blob = new Blob([B.store.exportText(photos)], { type: 'application/json' }), a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `hien-nha-bun-${B.time.today()}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast(`Đã xuất tệp sao lưu vào thư mục Tải xuống${photos.length ? `, kèm ${photos.length} ảnh trên tường` : ''}.`, { icon: 'download' });
+    });
   }
   function importFromText(text) {
-    let s;
-    try { s = B.store.parseImport(text); } catch (err) { return toast(esc(err.message), { icon: 'x', ms: 6000 }); }
-    confirmBox('Nhập dữ liệu từ tệp?', `Tệp này có ${s.tasks.length} việc đang mở, ${s.coins || 0} xu, Bun đời thứ ${(s.bun && s.bun.gen) || 1}. Dữ liệu hiện tại trên máy sẽ bị thay thế.`, 'Thay thế', true).then((ok) => {
+    let s, photos = [];
+    try { s = B.store.parseImport(text); photos = JSON.parse(text).photos || []; } catch (err) { return toast(esc(err.message), { icon: 'x', ms: 6000 }); }
+    return confirmBox('Nhập dữ liệu từ tệp?', `Tệp này có ${s.tasks.length} việc đang mở, ${s.coins || 0} xu, Bun đời thứ ${(s.bun && s.bun.gen) || 1}${photos.length ? `, ${photos.length} ảnh` : ''}. Dữ liệu hiện tại trên máy sẽ bị thay thế.`, 'Thay thế', true).then((ok) => {
       if (!ok) return;
-      if (B.store.applyImport(s)) { B.skipSave = true; location.reload(); } else toast('Không lưu được dữ liệu vừa nhập.', { icon: 'x' });
+      if (!B.store.applyImport(s)) return toast('Không lưu được dữ liệu vừa nhập.', { icon: 'x' });
+      B.skipSave = true;
+      return B.photos.importAll(photos).then(() => location.reload());
     });
   }
   function openSettings() {
@@ -363,7 +340,7 @@
       if (t.closest('[data-export]')) return doExport();
       if (t.closest('[data-import]')) return $('#importFile').click();
       if (t.closest('[data-realtime]')) { B.time.preview = null; B.time.weatherPreview = null; B.scene.updateLight(); renderHud(); return draw(); }
-      if (t.closest('[data-reset]')) confirmBox('Xóa toàn bộ dữ liệu?', 'Mọi thứ sẽ trở về ngày đầu tiên và không thể khôi phục, trừ khi bạn đã xuất tệp sao lưu.', 'Xóa hết', true).then((ok) => { if (ok) { B.skipSave = true; B.store.reset(); location.reload(); } });
+      if (t.closest('[data-reset]')) confirmBox('Xóa toàn bộ dữ liệu?', 'Mọi thứ sẽ trở về ngày đầu tiên và không thể khôi phục, trừ khi bạn đã xuất tệp sao lưu.', 'Xóa hết', true).then((ok) => { if (ok) { B.skipSave = true; B.store.reset(); B.photos.clearAll().then(() => location.reload()); } });
     });
     m.body.addEventListener('input', (e) => {
       if (e.target.id === 'hourPrev') { B.time.preview = +e.target.value; $('#hourLbl', m.body).textContent = hourLabel(B.time.preview); B.scene.updateLight(); renderHud(); }
@@ -479,10 +456,10 @@
       const b = e.target.closest('[data-act]');
       if (!b) return;
       const a = b.dataset.act;
-      if (a !== 'feed') closePopover();
-      if (a === 'feed') openFeed(); else if (a === 'water') doWater(); else if (a === 'play') doPlay(); else if (a === 'pet') B.bun.pet(); else if (a === 'call') B.bun.call(); else if (a === 'focus') openFocus();
+      if (a === 'feed') B.worldui.menu('food'); else if (a === 'water') B.worldui.menu('drink'); else if (a === 'play') B.worldui.menu('play');
+      else { closePopover(); if (a === 'pet') B.bun.pet(); else if (a === 'call') B.bun.call(); else if (a === 'focus') openFocus(); }
     });
-    $('#popover').addEventListener('click', (e) => { const f = e.target.closest('[data-food]'); if (f) doFeed(f.dataset.food); });
+    $('#popover').addEventListener('click', (e) => { const f = e.target.closest('[data-food]'); if (f) { closePopover(); B.worldui.feed(f.dataset.food); } });
     $('#svgActors').addEventListener('click', closePopover);
     $('#btnShop').addEventListener('click', () => openShop());
     $('#btnJournal').addEventListener('click', openJournal);

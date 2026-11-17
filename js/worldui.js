@@ -214,7 +214,7 @@
     B.on('change', renderChip);
     B.photos.init();
     setTimeout(tick, 4000);
-    renderChip();
+    renderChip(); badge();
   }
 
   B.worldui = { init, tick, menu, feed, shopTab, shopClick, shopChange, openHealth, openPhotos, renderChip };

@@ -16,14 +16,14 @@
     simStep(h, rest) {
       const b = B.S.bun, st = b.stats;
       if (b.frame == null) { b.frame = 1; b.bcs = 4.5; b.diet = 1; b.wlog = []; }
-      if (rest || st.hunger > 30) b.frame = Math.min(3, b.frame + (3 - b.frame) * (h / (24 * 22)) * U.clamp(b.diet, 0.5, 1.25) * (0.6 + 0.4 * B.nutri.health() / 100));
+      if (rest || st.hunger > 30) b.frame = Math.min(3, b.frame + (3 - b.frame) * (h / (24 * 45)) * U.clamp(b.diet, 0.5, 1.25) * (0.6 + 0.4 * B.nutri.health() / 100));
       if (!rest) {
-        if (st.hunger < 12) b.bcs -= 0.022 * h; // đói kéo dài: gầy đi dần
-        else if (st.hunger > 104) b.bcs += 0.035 * h; // ăn quá no: tích mỡ dần
+        if (st.hunger < 12) b.bcs -= 0.008 * h; // đói kéo dài: gầy đi dần
+        else if (st.hunger > 104) b.bcs += 0.012 * h; // ăn quá no: tích mỡ dần
         else b.bcs += (4.5 - b.bcs) * 0.004 * h;
       }
       b.bcs = U.clamp(b.bcs, 1.5, 8.5);
-      b.weight = U.clamp(b.frame * (1 + (b.bcs - 4.5) * 0.07), 1, 3);
+      b.weight = U.clamp(b.frame * (1 + (b.bcs - 4.5) * 0.06), 1, 3);
     },
     logWeight() {
       const b = B.S.bun, k = B.time.today(), l = b.wlog || (b.wlog = []), w = +(b.weight || 1).toFixed(3);

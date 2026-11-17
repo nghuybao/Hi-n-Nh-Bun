@@ -9,10 +9,13 @@
     if (dbp) return dbp;
     dbp = new Promise((res, rej) => {
       if (!window.indexedDB) return rej(new Error('Trình duyệt không hỗ trợ lưu ảnh.'));
-      const rq = indexedDB.open(DBN, 1);
+      const blocked = () => { dbp = null; rej(new Error('Trình duyệt đang chặn bộ nhớ lưu ảnh (thường gặp ở cửa sổ ẩn danh hoặc khi mở từ tệp). Hãy mở bằng "Mở Hiên Nhà Bun.cmd" hoặc một cửa sổ thường.')); };
+      let rq;
+      try { rq = indexedDB.open(DBN, 1); } catch (e) { return blocked(); }
+      const t = setTimeout(blocked, 5000);
       rq.onupgradeneeded = () => rq.result.createObjectStore(STORE);
-      rq.onsuccess = () => res(rq.result);
-      rq.onerror = () => rej(rq.error);
+      rq.onsuccess = () => { clearTimeout(t); res(rq.result); };
+      rq.onerror = () => { clearTimeout(t); blocked(); };
     });
     return dbp;
   }

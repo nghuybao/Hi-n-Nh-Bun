@@ -280,7 +280,7 @@
     const S = B.S, t = B.tasks.get(taskId);
     if (!t || t.done) return;
     const step = stepId && t.steps.find((s) => s.id === stepId), name = esc(t.title) + (step ? ' · ' + esc(step.title) : '');
-    const m = B.ui.modal({ title: 'Hết giờ của khối này', cls: 'small', html: `<p><b>${name}</b></p><p>Bạn đã làm ${Math.round(t.spent)}′ trên ${dur(t.est)} dự kiến. ${t.spent > t.est ? 'Lâu hơn dự kiến một chút cũng không sao, Bun ghi lại để lần sau ước lượng sát hơn.' : ''}</p>
+    const m = B.ui.modal({ title: 'Hết giờ của khối này', cls: 'small', html: `<p><b>${name}</b></p><p>Bạn đã làm ${dur(Math.round(t.spent))} trên ${dur(t.est)} dự kiến. ${t.spent > t.est ? 'Lâu hơn dự kiến một chút cũng không sao, Bun ghi lại để lần sau ước lượng sát hơn.' : ''}</p>
       <div class="col-btns"><button class="btn primary" data-tu="done" data-autofocus>${ic('check')}Xong rồi</button><button class="btn soft" data-tu="break">Nghỉ ${S.plan.breakLen}′ rồi làm tiếp</button><button class="btn soft" data-tu="more">Thêm 10 phút nữa</button>
       <button class="btn soft" data-tu="later">Làm tiếp lúc khác trong hôm nay</button><button class="btn ghost" data-tu="tomorrow">Dời phần còn lại sang mai</button></div><p class="hint">Dù chọn gì, thời gian đã làm vẫn được giữ.</p>` });
     m.body.addEventListener('click', (e) => {

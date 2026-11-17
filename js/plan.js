@@ -346,6 +346,9 @@
   function stepToggle(taskId, stepId) {
     const t = B.tasks.get(taskId), s = t && t.steps.find((x) => x.id === stepId);
     if (!s || t.done) return null;
+    // Đang đếm giờ cho đúng bước này thì khép phiên lại, thời gian đã làm được cộng vào việc
+    const f = B.S.focus;
+    if (!s.done && f && f.kind !== 'break' && f.taskId === taskId && (!f.stepId || f.stepId === stepId)) B.focus.finishEarly(true);
     s.done = !s.done; s.doneAt = s.done ? B.now() : null;
     if (s.done) { B.S.bun.stats.joy = U.clamp(B.S.bun.stats.joy + 2, 0, 100); B.care(); }
     if (s.done && t.steps.every((x) => x.done)) return B.tasks.complete(t);
