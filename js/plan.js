@@ -94,8 +94,10 @@
     const S = B.S, P = S.plan, today = B.time.today(), isToday = date === today, dp = dayState(date);
     const energy = o.energy || (isToday ? dp.energy : 'normal') || 'normal';
     const focusLen = energy === 'low' ? Math.min(P.focusLen, 30) : P.focusLen, breakLen = P.breakLen;
-    const endMin = o.endMin != null ? o.endMin : isToday && dp.endMin != null ? dp.endMin : toMin(P.dayEnd);
     const from = o.from != null ? o.from : isToday ? Math.max(toMin(P.dayStart), ceil5(nowMin())) : toMin(P.dayStart);
+    // Giới hạn "còn ít thời gian" chỉ có hiệu lực khi còn đủ chỗ để xếp việc; hết hạn rồi thì quay về giờ kết thúc ngày
+    if (isToday && dp.endMin != null && dp.endMin < from + 30) dp.endMin = null;
+    const endMin = o.endMin != null ? o.endMin : isToday && dp.endMin != null ? dp.endMin : toMin(P.dayEnd);
     let cursor = from;
     const order = dp.order, manual = !!(order && order.length) && !o.auto;
 
