@@ -58,6 +58,9 @@
     B.ui.init();
     if (B.focusui) B.focusui.init();
     if (B.worldui) B.worldui.init();
+    if (B.walk) B.walk.init();
+    if (B.room) B.room.init();
+    if (B.audio) B.audio.init();
 
     B.on('taskDone', (info) => { B.bun.celebrate(info); B.scene.updateJar(); });
     B.on('house', (d) => {

@@ -11,17 +11,18 @@
       if (!window.indexedDB) return rej(new Error('Trình duyệt không hỗ trợ lưu ảnh.'));
       const blocked = () => { dbp = null; rej(new Error('Trình duyệt đang chặn bộ nhớ lưu ảnh (thường gặp ở cửa sổ ẩn danh hoặc khi mở từ tệp). Hãy mở bằng "Mở Hiên Nhà Bun.cmd" hoặc một cửa sổ thường.')); };
       let rq;
-      try { rq = indexedDB.open(DBN, 1); } catch (e) { return blocked(); }
+      try { rq = indexedDB.open(DBN, 2); } catch (e) { return blocked(); }
       const t = setTimeout(blocked, 5000);
-      rq.onupgradeneeded = () => rq.result.createObjectStore(STORE);
+      // Phiên bản 2: thêm kho "audio" cho nhạc nền người dùng nhập; ảnh cũ giữ nguyên
+      rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE); if (!d.objectStoreNames.contains('audio')) d.createObjectStore('audio'); };
       rq.onsuccess = () => { clearTimeout(t); res(rq.result); };
       rq.onerror = () => { clearTimeout(t); blocked(); };
     });
     return dbp;
   }
-  function tx(mode, fn) {
+  function tx(mode, fn, store) {
     return db().then((d) => new Promise((res, rej) => {
-      const t = d.transaction(STORE, mode), r = fn(t.objectStore(STORE));
+      const t = d.transaction(store || STORE, mode), r = fn(t.objectStore(store || STORE));
       t.oncomplete = () => res(r && r.result);
       t.onerror = t.onabort = () => rej(t.error);
     }));
@@ -53,6 +54,9 @@
     for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
     return new Blob([arr], { type: m[1] });
   }
+
+  // Kho chung cho tệp lớn (ảnh, nhạc), tách theo từng ngăn
+  B.idb = { put: (store, id, blob) => tx('readwrite', (s) => s.put(blob, id), store), get: (store, id) => tx('readonly', (s) => s.get(id), store), del: (store, id) => tx('readwrite', (s) => s.delete(id), store) };
 
   B.photos = {
     MAX, SIZES, urls,
@@ -86,7 +90,7 @@
       B.store.save();
       return del(id).catch(() => {});
     },
-    clearAll: () => tx('readwrite', (s) => s.clear()).catch(() => {}),
+    clearAll: () => Promise.all([tx('readwrite', (s) => s.clear()), tx('readwrite', (s) => s.clear(), 'audio')]).catch(() => {}),
     exportAll: () => Promise.all((B.S.photos || []).map((p) => get(p.id).then((b) => (b ? toDataURL(b).then((data) => ({ id: p.id, data })) : null)).catch(() => null))).then((l) => l.filter(Boolean)),
     importAll: (list) => Promise.all((list || []).map((x) => { const b = fromDataURL(x.data); return b ? put(x.id, b) : null; })).catch(() => {}),
     // Vị trí khung ảnh trên tường tính theo tỉ lệ, để hợp mọi kích thước màn hình

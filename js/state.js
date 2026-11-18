@@ -241,13 +241,18 @@
     if (!out.length) out.push({ name: 'Tò mò', desc: 'Còn đang làm quen với ngôi nhà.' });
     return out.slice(0, 3);
   };
+  // Tâm trạng hiển thị trên mặt và dáng đi của Bun
   B.mood = () => {
-    const s = B.S.bun.stats;
+    const s = B.S.bun.stats, sx = B.S.bun.stress || 0;
     if (s.hunger < 25 || s.thirst < 25) return 'needy';
+    if (sx > 65) return 'stressed';
     if (s.joy < 30) return 'sad';
+    if (s.hunger < 50) return 'hungry';
     if (s.energy < 25) return 'sleepy';
     return (s.hunger + s.thirst + s.joy + s.energy) / 4 >= 62 ? 'happy' : 'ok';
   };
+  // Giảm căng thẳng khi được chăm sóc
+  B.calm = (n) => { const b = B.S.bun; b.stress = Math.max(0, (b.stress || 0) - n); };
 
   /* ---------- Kỷ niệm ---------- */
   B.mem = {
@@ -286,7 +291,9 @@
       S.restDays[U.dateKey(new Date(t))] = 1;
       const k = Math.min(1, (dt / HOUR) * 0.5);
       ['hunger', 'thirst', 'joy', 'energy'].forEach((n) => (st[n] += (72 - st[n]) * k));
+      S.bun.stress = (S.bun.stress || 0) + (10 - (S.bun.stress || 0)) * k;
       if (B.nutri) B.nutri.simStep(dt / HOUR, true);
+      if (B.pets && B.pets.sim) B.pets.sim(dt / HOUR, true);
       return;
     }
     const h = dt / HOUR, k = B.DIFF[S.settings.difficulty].decay;
@@ -301,11 +308,23 @@
     const slow = asleep ? 0.45 : 1;
     st.hunger -= 2.8 * k * slow * h;
     st.thirst -= 3.6 * k * slow * h;
-    st.joy -= 2.1 * k * (asleep ? 0.3 : 1) * (st.hunger < 20 || st.thirst < 20 ? 1.5 : 1) * h;
-    st.energy += (asleep ? 13 : -4.2) * h;
+    // Đói dưới 50% thì niềm vui giảm nhanh hơn; đói, khát nặng thì càng nhanh
+    st.joy -= 2.1 * k * (asleep ? 0.3 : 1) * (st.hunger < 20 || st.thirst < 20 ? 1.9 : st.hunger < 50 ? 1.5 : 1) * h;
+    // Căng thẳng: tăng dần khi niềm vui thấp kéo dài, giảm khi Bun được chăm sóc đầy đủ
+    const b = S.bun, joy = st.joy;
+    let sx = b.stress || 0;
+    if (joy < 35) sx += (1.0 + 2.2 * (35 - joy) / 35) * (asleep ? 0.5 : 1) * h;
+    else if (joy >= 55 && st.hunger >= 50 && st.thirst >= 40) sx -= (asleep ? 3 : 2.4) * h;
+    else sx -= 0.4 * h;
+    b.stress = U.clamp(sx, 0, 100);
+    // Căng thẳng cao làm Bun ngủ kém hồi sức và hao năng lượng hơn khi thức
+    st.energy += (asleep ? 13 * (1 - b.stress / 250) : -4.2 * (1 + b.stress / 160)) * h;
+    // Căng thẳng cao kéo dài làm Bun gầy đi từ từ (thang cân nặng của trò chơi)
+    if (b.stress > 65 && b.bcs != null) b.bcs = Math.max(1.5, b.bcs - 0.006 * (0.5 + (b.stress - 65) / 35) * h);
     ['thirst', 'joy', 'energy'].forEach((n) => (st[n] = U.clamp(st[n], 0, 100)));
     st.hunger = U.clamp(st.hunger, 0, 125); // trên 100 là "quá no", dùng cho thể trạng
     if (B.nutri) B.nutri.simStep(h, false);
+    if (B.pets && B.pets.sim) B.pets.sim(h, false);
   }
   B.sim = {
     // Tiến đồng hồ tới "now". Trả về số mili giây đã trôi qua.
@@ -372,8 +391,10 @@
     play() {
       const S = B.S, st = S.bun.stats;
       if (st.energy < 15) return { ok: false, reason: 'tired' };
+      if (st.hunger < 30) return { ok: false, reason: 'hungry' }; // đói quá thì không còn sức chơi
       const toys = S.house.owned.filter((id) => id.indexOf('toy_') === 0).length;
-      st.joy = U.clamp(st.joy + 22 + toys * 3, 0, 100);
+      st.joy = U.clamp(st.joy + (22 + toys * 3) * (st.hunger < 50 ? 0.5 : 1), 0, 100); // đói thì chơi kém hăng
+      B.calm(8);
       st.energy = U.clamp(st.energy - 9, 0, 100);
       st.hunger = U.clamp(st.hunger - 4, 0, 100);
       st.thirst = U.clamp(st.thirst - 5, 0, 100);
@@ -387,7 +408,7 @@
       const S = B.S, st = S.bun.stats;
       S.day.petCount++;
       S.bun.counters.pet++;
-      if (S.day.petCount <= 12) st.joy = U.clamp(st.joy + 2.5, 0, 100);
+      if (S.day.petCount <= 12) { st.joy = U.clamp(st.joy + 2.5, 0, 100); B.calm(1.5); }
       B.addBond(1, true); B.care();
       B.store.save(); B.emit('change');
       return { ok: true };

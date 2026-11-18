@@ -92,7 +92,7 @@
         id: U.uid(), title, shift: data.shift === 'pm' || (!data.shift && date === today && B.plan.nowMin() >= noon) ? 'pm' : 'am', priority: cap.priority, date,
         done: false, doneAt: null, createdAt: B.now(), planned: date > today, carried: 0, reward: 0,
         cat: String(data.cat || g.cat).slice(0, 30), est, load: B.LOADS[data.load] ? data.load : g.load, diff: B.DIFFS[data.diff] ? data.diff : 'med',
-        deadline: data.deadline || null, prefTime: data.prefTime || null, dod: String(data.dod || '').trim().slice(0, 240), dodAuto: false,
+        deadline: data.deadline || null, prefTime: data.prefTime || null, shiftPref: data.shiftPref === "am" || data.shiftPref === "pm" ? data.shiftPref : null, dod: String(data.dod || '').trim().slice(0, 240), dodAuto: false,
         notes: String(data.notes || '').trim().slice(0, 500), steps: [], spent: 0,
       };
       if (!t.dod) { t.dod = B.plan.scope(title, Math.min(est, 90)); t.dodAuto = true; }
@@ -114,6 +114,7 @@
       if (patch.diff && B.DIFFS[patch.diff]) t.diff = patch.diff;
       if (patch.deadline !== undefined) t.deadline = patch.deadline || null;
       if (patch.prefTime !== undefined) t.prefTime = patch.prefTime || null;
+      if (patch.shiftPref !== undefined) t.shiftPref = patch.shiftPref === 'am' || patch.shiftPref === 'pm' ? patch.shiftPref : null;
       if (patch.notes != null) t.notes = String(patch.notes).trim().slice(0, 500);
       if (patch.dod != null) { const d = String(patch.dod).trim().slice(0, 240); if (d !== t.dod) { t.dod = d; t.dodAuto = !d; } }
       if (patch.est != null && +patch.est !== t.est) {

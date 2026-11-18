@@ -10,6 +10,10 @@
   const reduce = () => document.documentElement.classList.contains('reduce-motion');
   const Lay = () => B.scene.layout();
   const isNight = () => { const h = B.time.hour(); return h >= 22.5 || h < 6 || (B.S.day.eveningDone && h >= 19); };
+  // Tốc độ đi theo tâm trạng: đói, buồn, căng thẳng thì chậm hẳn lại
+  // Tiếng động gắn đúng với hành động của Bun (kênh tiếng thú cưng hoặc tiếng tương tác)
+  const snd = (n) => { if (B.audio) B.audio.play(n); };
+  const moodSpeed = () => { const m = B.mood(); return m === 'needy' ? 0.5 : m === 'hungry' || m === 'stressed' ? 0.62 : m === 'sad' ? 0.72 : 1; };
   const cool = (key, ms) => { const t = pnow(); if (st.cool[key] && t < st.cool[key]) return false; st.cool[key] = t + ms; return true; };
 
   /* ---------- Gắn vào cảnh ---------- */
@@ -52,9 +56,12 @@
     el.dataset.mood = mood;
     const sleeping = st.pose === 'sleep';
     el.dataset.eyes = sleeping ? 'closed' : st.eyes && t < st.eyesUntil ? st.eyes : 'open';
-    el.dataset.mouth = sleeping ? 'calm' : mood === 'sad' ? 'sad' : mood === 'needy' || mood === 'sleepy' || st.pose === 'lie' ? 'calm' : 'open';
+    const low = mood === 'sad' || mood === 'hungry' || mood === 'stressed' || mood === 'needy';
+    el.dataset.mouth = sleeping ? 'calm' : low ? 'sad' : mood === 'sleepy' || st.pose === 'lie' ? 'calm' : 'open';
     if (st.eyes === 'happy' && t < st.eyesUntil && !sleeping) el.dataset.mouth = 'open';
+    // Đói, buồn hay căng thẳng: đuôi thôi vẫy, bước chân chậm và nặng nề hơn
     el.classList.toggle('wag', !sleeping && (mood === 'happy' || mood === 'ok'));
+    el.classList.toggle('slow', low);
   }
 
   /* ---------- Di chuyển ---------- */
@@ -75,14 +82,14 @@
     last = t;
     if (el && el.isConnected && !B.S.bun.away) {
       if (st.target) {
-        const dx = st.target.x - st.x, dy = st.target.y - st.y, d = Math.hypot(dx, dy), sp = (st.run ? 340 : 100) * (reduce() ? 5 : 1);
+        const dx = st.target.x - st.x, dy = st.target.y - st.y, d = Math.hypot(dx, dy), sp = (st.run ? 340 : 100) * moodSpeed() * (reduce() ? 5 : 1);
         if (Math.abs(dx) > 2) st.dir = dx > 0 ? 1 : -1;
         if (d <= sp * dt) {
           st.x = st.target.x; st.y = st.target.y;
           const fn = st.then;
           stopMoving(); applyTransform();
           if (fn) fn();
-        } else { st.x += (dx / d) * sp * dt; st.y += (dy / d) * sp * dt; applyTransform(); }
+        } else { st.x += (dx / d) * sp * dt; st.y += (dy / d) * sp * dt; applyTransform(); st.stepAcc = (st.stepAcc || 0) + sp * dt; if (st.stepAcc > (st.run ? 46 : 34)) { st.stepAcc = 0; snd(st.run ? 'run' : 'step'); } }
       } else if (!st.busy && t > st.until) decide();
       if (bubble && t < st.bubbleUntil) placeBubble();
       else if (bubble && bubble.classList.contains('on')) bubble.classList.remove('on');
@@ -177,8 +184,10 @@
       return goTo(sp.desk.x, sp.desk.y, { then() { setPose('sit'); sayCat('habit', 5000); st.until = pnow() + 14000; } });
     }
     const rainy = B.scene.weather() === 'rain', toys = S.house.owned.filter((id) => id.indexOf('toy_') === 0), c = S.bun.counters;
-    const opts = [['wander', 30], ['sit', 13], ['rug', 14], ['window', rainy ? 24 : 10], ['front', c.pet >= 30 ? 20 : 10], ['door', h >= 16 && h < 19 ? 8 : 3], ['trick', 4]];
-    if (toys.length) opts.push(['toy', c.play >= 10 ? 18 : 9]);
+    const low = ['sad', 'hungry', 'stressed', 'needy'].indexOf(B.mood()) >= 0;
+    // Khi đói hay buồn, Bun ít nghịch hơn: nằm một chỗ và ngồi chờ ở cửa nhiều hơn
+    const opts = low ? [['wander', 12], ['sit', 16], ['rug', 26], ['window', 14], ['mope', 22], ['door', 10]] : [['wander', 30], ['sit', 13], ['rug', 14], ['window', rainy ? 24 : 10], ['front', c.pet >= 30 ? 20 : 10], ['door', h >= 16 && h < 19 ? 8 : 3], ['trick', 4]];
+    if (toys.length && !low) opts.push(['toy', c.play >= 10 ? 18 : 9]);
     const pal = B.friends && B.friends.nearest();
     if (pal) opts.push(['friend', 16]);
     if (L.lvl >= 4 && B.scene.light().fireOn) opts.push(['fire', 16]);
@@ -236,6 +245,7 @@
   function pet() {
     if (!el || B.S.bun.away) return;
     B.careActions.pet();
+    snd(st.pose === 'sleep' ? 'sleep' : B.mood() === 'happy' || B.mood() === 'ok' ? 'happy' : 'whine');
     if (st.pose === 'sleep') {
       const tok = script();
       setPose('lie'); st.eyes = 'closed'; st.eyesUntil = pnow() + 1200; applyFace();
@@ -256,6 +266,7 @@
   function call() {
     if (!el || B.S.bun.away) return;
     const tok = script();
+    if (!(st.pose === 'sleep' && isNight())) snd('bark');
     if (st.pose === 'sleep' && isNight()) {
       setPose('lie'); sayCat('night'); st.wakeUntil = pnow() + 8000;
       later(tok, 5000, () => free(tok, 200));
@@ -273,6 +284,7 @@
       run: true,
       then() {
         st.dir = -1; applyTransform(); setPose('eat');
+        snd(kind === 'water' ? 'drink' : 'eat');
         later(tok, 3200, () => {
           setPose('stand'); happy(1800); hearts(2); jump(1);
           sayCat(kind === 'water' ? 'drank' : 'fed');
@@ -286,6 +298,7 @@
     const tok = script(), L = Lay(), f = L.floor, sp = B.scene.spots().front;
     st.wakeUntil = pnow() + 20000;
     B.emit('bunPlay');
+    snd('bark'); setTimeout(() => snd('bounce'), 700);
     const finish = () => { setPose('stand'); jump(2); happy(2200); hearts(2); sayCat('played'); later(tok, 2400, () => free(tok, 1500)); };
     const ball = document.querySelector('#sorted .toy[data-toy="toy_ball"]');
     if (!ball || reduce()) return zoomies(tok, 3, () => goTo(sp.x, sp.y, { run: true, then: finish }));
@@ -328,6 +341,7 @@
     }
     if (st.pose === 'back' || st.pose === 'eat') setPose('sit');
     happy(2800); jump(2); sparkles(); hearts(2);
+    snd('happy');
     say(U.pick(info.allDone ? B.LINES.allDone : info.task && info.task.priority === 'ui' ? B.LINES.taskBig : B.LINES.taskDone), 4200);
     if (info.allDone && !B.S.focus) later(tok, 1100, () => zoomies(tok, 3, () => { setPose('sit'); happy(2000); free(tok, 3000); }));
     else later(tok, 2600, () => free(tok, B.S.focus ? 300 : 1500));
@@ -350,6 +364,7 @@
       run: true,
       then() {
         setPose('stand'); jump(2); happy(3200); hearts(far ? 4 : 2);
+        snd('bark'); setTimeout(() => snd('happy'), 450);
         sayCat(awayMs > 48 * HOUR ? 'welcomeVeryLong' : awayMs > 12 * HOUR ? 'welcomeLong' : far ? 'welcomeMid' : 'welcomeShort', 5000);
         later(tok, 3200, () => { setPose('sit'); free(tok, 4000); });
       },
@@ -385,7 +400,7 @@
   function gift() {
     if (!el || st.pose === 'sleep') return false;
     const tok = script(), sp = B.scene.spots().front;
-    goTo(sp.x, sp.y, { run: true, then() { setPose('sit'); happy(2600); sparkles(); sayCat('gift', 4500); later(tok, 3600, () => free(tok, 2500)); } });
+    goTo(sp.x, sp.y, { run: true, then() { setPose('sit'); happy(2600); snd('happy'); sparkles(); sayCat('gift', 4500); later(tok, 3600, () => free(tok, 2500)); } });
     return true;
   }
   function cheer(cat, spot) {
@@ -397,9 +412,9 @@
 
   /* ---------- Khởi động ---------- */
   function onSceneClick(e) {
-    if (!el) return;
+    if (!el || (B.room && B.room.state.on)) return; // đang sắp xếp phòng thì bấm không làm Bun đi lại
     const fr = e.target.closest && e.target.closest('.friend');
-    if (fr && B.friends) return B.friends.pet(fr.dataset.id);
+    if (fr && B.friends) { B.friends.pet(fr.dataset.id); return B.pets.openMenu(fr.dataset.id); }
     if (e.target.closest && e.target.closest('#bun')) return pet();
     const p = B.scene.fromScreen(e.clientX, e.clientY), L = Lay(), w = L.win, d = L.door;
     if (p.x > w.x1 - 30 && p.x < w.x2 + 30 && p.y > w.top - 30 && p.y < w.bot + 30) {

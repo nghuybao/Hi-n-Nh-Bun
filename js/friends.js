@@ -64,6 +64,24 @@
     setPose(a, 'up');
     a.el.classList.add('moving');
   }
+  const snd = (a) => { if (B.audio) B.audio.play(a.kind, { src: 'pet' }); };
+  // Ăn hoặc uống ở bát riêng của mình
+  function eat(a, what) {
+    const sp = B.pets.spotOf(a.pet, what);
+    if (!sp) { a.until = pnow() + 4000; return; }
+    goTo(a, sp.x - 46, sp.y + 4, () => {
+      a.dir = 1; apply(a); a.el.classList.add('eating');
+      if (B.audio) B.audio.play(what === 'food' ? 'eat' : 'drink', { src: 'pet' });
+      a.until = pnow() + 3200;
+      setTimeout(() => { if (a.el) a.el.classList.remove('eating'); B.pets.consume(a.pet, what); fx(a); }, reduce() ? 600 : 3000);
+    });
+  }
+  // Chơi với đồ chơi riêng: chạy tới, nhảy nhót quanh nó
+  function playOwn(a) {
+    const toy = B.pets.objects(Lay()).find((o) => o.pet === a.pet && o.it.role === 'toy');
+    if (!toy) return;
+    goTo(a, toy.x - 40, toy.y + 4, () => { a.dir = 1; apply(a); fx(a); fx(a, B.friendDef(a.kind).sound); snd(a); let n = 0; const hop = () => { if (n++ > 2 || !a.el) { a.until = pnow() + 5000; return; } a.el.classList.add('hop'); setTimeout(() => { if (a.el) a.el.classList.remove('hop'); setTimeout(hop, 160); }, 380); }; hop(); }, true);
+  }
   function fx(a, text) {
     if (!a.el) return;
     const g = a.el.querySelector('.f-fx');
@@ -73,7 +91,10 @@
   }
   function restSpot(a, i) {
     const sp = B.scene.spots(), L = Lay();
-    if (a.kind === 'cat' && Math.random() < 0.6) return { sill: true, x: L.win.cx - L.win.w * 0.2, y: L.win.bot + 14 };
+    // Mỗi bạn ngủ ở giường riêng của mình; mèo thỉnh thoảng thích bệ cửa sổ hơn
+    const own = B.pets && B.pets.spotOf ? B.pets.spotOf(a.pet, 'bed') : null;
+    if (a.kind === 'cat' && Math.random() < (own ? 0.35 : 0.6)) return { sill: true, x: L.win.cx - L.win.w * 0.2, y: L.win.bot + 14 };
+    if (own) return { x: own.x, y: own.y + 4 };
     if (a.kind === 'hedgehog') return L.lvl >= 4 && B.scene.light().fireOn ? { x: sp.fire.x + 90, y: sp.fire.y + 8 } : { x: sp.bed.x - 170, y: sp.bed.y + 40 };
     return { x: sp.rug.x + (i % 2 ? 90 : -90), y: sp.rug.y + 10 };
   }
@@ -92,10 +113,15 @@
     });
   }
   function decide(a, i) {
+    // Đói hay khát thì tự tìm tới bát riêng của mình
+    const P = a.pet, S0 = B.S;
+    if (P && !S0.bun.away && P.hunger < 40 && (P.bowlFood || 0) > 0 && B.pets.spotOf(P, 'food')) return eat(a, 'food');
+    if (P && !S0.bun.away && P.thirst < 40 && (P.bowlWater || 0) > 0 && B.pets.spotOf(P, 'water')) return eat(a, 'water');
+    if (P && (P.hunger < 25 || P.thirst < 25) && pnow() > (a.askUntil || 0)) { a.askUntil = pnow() + 120000; const sp = B.pets.spotOf(P, P.hunger < 25 ? 'food' : 'water'); if (sp) { goTo(a, sp.x - 50, sp.y + 6, () => { fx(a, B.friendDef(a.kind).sound); snd(a); a.until = pnow() + 8000; }); return; } }
     const f = Lay().floor, bs = B.bun.state, S = B.S;
     if (S.bun.away) { a.until = pnow() + 8000; return; }
     const h = B.time.hour(), night = h >= 22.5 || h < 6 || bs.pose === 'sleep';
-    if (night) { if (a.pose === 'sleep') { a.until = pnow() + 20000; return; } return settle(a, a.kind === 'cat' && Math.random() < 0.4 ? restSpot(a, i) : { x: B.scene.spots().bed.x - 160 - i * 62, y: B.scene.spots().bed.y + 36 }, true); }
+    if (night) { if (a.pose === 'sleep') { a.until = pnow() + 20000; return; } return settle(a, restSpot(a, i), true); }
     const r = Math.random();
     if (r < 0.28 && !S.focus) return meet(a);
     if (r < 0.58) return goTo(a, U.rand(f.x1, f.x2), U.rand(f.y1 + 10, f.y2), () => { a.until = pnow() + U.rand(2000, 6000); });
@@ -133,7 +159,7 @@
   }
 
   B.friends = {
-    thumb,
+    thumb, art: (kind) => ART[kind] || "",
     svg: () => (B.S.pets || []).map(one).join(''),
     list: () => Object.keys(actors).map((id) => actors[id]).filter((a) => a.el),
     init() {
@@ -147,12 +173,14 @@
     pet(id) {
       const a = actors[id];
       if (!a) return;
-      fx(a); fx(a, B.friendDef(a.kind).sound);
+      fx(a); fx(a, B.friendDef(a.kind).sound); snd(a);
       if (a.pose === 'sleep') { setPose(a, 'up'); a.until = pnow() + 6000; }
       B.pets.bond(id, 1); B.care(); B.store.save();
     },
     // Bun chủ động lại gần một bạn
     nearest() { const l = B.friends.list().filter((a) => !a.sill); return l.length ? U.pick(l) : null; },
     greeted(id) { const a = actors[id]; if (a) { fx(a); B.pets.bond(id, 1); if (a.pose !== 'sleep') a.until = pnow() + 6000; } },
+    goEat(id, what) { const a = actors[id]; if (a) { a.target = null; setPose(a, 'up'); eat(a, what); } },
+    playOwn(id) { const a = actors[id]; if (a) { setPose(a, 'up'); playOwn(a); } },
   };
 })();

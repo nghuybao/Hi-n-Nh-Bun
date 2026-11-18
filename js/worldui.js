@@ -11,7 +11,7 @@
     const pop = $('#popover'), S = B.S;
     if (!pop.hidden && pop.dataset.kind === kind) { pop.hidden = true; return; }
     pop.dataset.kind = kind;
-    if (kind === 'play') pop.innerHTML = `<h4>Vận động cùng Bun</h4><button class="pop-item" data-do="play"><span><strong>Chơi đùa</strong><small>Ném bóng hoặc chạy vòng quanh phòng</small></span></button><button class="pop-item" data-do="walk"><span><strong>Dắt đi dạo</strong><small>Tốt cho vóc dáng, cách nhau ít nhất 2 giờ</small></span></button>`;
+    if (kind === 'play') pop.innerHTML = `<h4>Vận động cùng Bun</h4><button class="pop-item" data-do="play"><span><strong>Chơi đùa</strong><small>Ném bóng hoặc chạy vòng quanh phòng</small></span></button><button class="pop-item" data-do="walk"><span><strong>Dắt Bun đi dạo</strong><small>Ra công viên gần nhà, muốn về lúc nào cũng được</small></span></button>`;
     else pop.innerHTML = `<h4>${kind === 'food' ? 'Hôm nay Bun ăn gì?' : 'Bun uống gì?'}</h4>` + B.FOODS.filter((f) => f.kind === kind).map((f) => {
       const n = B.pantry.count(f.id), free = !n && S.coins < f.price && ((f.id === 'kibble' && !S.day.freeMeal) || (f.id === 'water' && !S.day.freeWater));
       return `<button class="pop-item" data-food="${f.id}"><span><strong>${f.name}</strong><small>${f.desc}</small></span><span class="price">${n ? `còn ${n}` : free ? 'Cứu trợ' : ic('coin') + f.price}</span></button>`;
@@ -36,10 +36,8 @@
     if (!d) return;
     $('#popover').hidden = true;
     if (d.dataset.do === 'pantry') return B.ui.openShop('pantry');
-    if (d.dataset.do === 'play') { const r = B.careActions.play(); return r.ok ? B.bun.playAnim() : B.bun.sayCat('tired'); }
-    const r = B.careActions.walk();
-    if (r.ok) { B.bun.walk(); B.ui.toast('Bun đang đi dạo một vòng. Vận động đều giúp Bun giữ dáng cân đối.', { icon: 'paw' }); }
-    else if (r.reason === 'recent') B.bun.say('Mình vừa đi dạo xong mà. Lát nữa đi tiếp nha.', 3800); else B.bun.sayCat('tired');
+    if (d.dataset.do === 'play') { const r = B.careActions.play(); if (r.ok) { if (B.S.bun.stats.hunger < 50) B.bun.say('Tớ hơi đói nên chơi không hăng lắm…', 3200); return B.bun.playAnim(); } return r.reason === 'hungry' ? B.bun.say('Tớ đói quá, chơi không nổi… cho tớ ăn trước nha.', 4000) : B.bun.sayCat('tired'); }
+    B.walk.start();
   }
 
   /* ---------- Cửa tiệm: thức ăn và bạn bè ---------- */
@@ -75,6 +73,8 @@
     if (st.tab === 'body') {
       const pos = U.clamp(((b.bcs || 4.5) - 1) / 8 * 100, 2, 98), dq = (b.diet || 1) >= 1.08 ? 'rất tốt' : (b.diet || 1) >= 0.9 ? 'đủ chất' : 'còn nghèo dinh dưỡng';
       h += `<div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><b>${kg(b.weight)}</b><span>Cân nặng trong trò chơi</span></div><div class="card"><b>${c.label}</b><span>Thể trạng ${(b.bcs || 4.5).toFixed(1).replace('.', ',')}/9</span></div><div class="card"><b>${hs}/100</b><span>Sức khỏe tổng quát</span></div></div>
+        <div class="stress-row"><span class="f-lbl">Mức căng thẳng</span><div class="meter stress-meter" style="--v:${Math.round(b.stress || 0)}"><i></i></div><b>${Math.round(b.stress || 0)}/100</b></div>
+        <p class="hint" style="margin:0 0 10px">${(b.stress || 0) > 65 ? "Bun đang căng thẳng kéo dài. Nếu kéo dài, Bun sẽ gầy đi từ từ. Cho ăn đủ, vuốt ve, chơi và dắt đi dạo sẽ giúp Bun bình tĩnh lại." : (b.stress || 0) > 35 ? "Bun hơi căng thẳng vì ít được vui. Một buổi chơi hoặc đi dạo sẽ giúp ích." : "Bun đang thư thái."}</p>
         <div class="bcs" aria-hidden="true"><i style="left:${pos}%"></i><span>Gầy</span><span>Cân đối</span><span>Thừa cân</span></div>
         <ul class="tips"><li>${ic('scale')}<span>${c.tip}</span></li><li>${ic('food')}<span>Chất lượng bữa ăn gần đây: ${dq}. Thức ăn dinh dưỡng giúp Bun lớn đều hơn, còn số lần cho ăn thì không làm Bun lớn nhanh hơn.</span></li>
           <li>${ic('paw')}<span>Hôm nay Bun đã đi dạo ${S.day.walks} lần và ăn ${S.day.treats} bánh thưởng.</span></li></ul>
@@ -211,6 +211,7 @@
     $('#btnPhotos').addEventListener('click', openPhotos);
     $('#weightChip').addEventListener('click', () => openHealth('body'));
     $('#popover').addEventListener('click', onPopover);
+    $('#popover').addEventListener('click', (e) => B.pets.onMenu(e));
     B.on('change', renderChip);
     B.photos.init();
     setTimeout(tick, 4000);

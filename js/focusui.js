@@ -60,14 +60,14 @@
       if (c.list) { pv.list = c.list; if (!c.v) pv.listType = 'playlist'; }
       st.ytReady = false;
       st.yt = new window.YT.Player('ytHost', {
-        width: '100%', height: '100%', videoId: c.v || undefined, playerVars: pv,
+        width: '100%', height: '100%', playerVars: pv, ...(c.v ? { videoId: c.v } : {}), // danh sách phát thuần thì không được gửi mã video rỗng
         events: {
           onReady: (e) => { st.ytReady = true; try { e.target.setVolume(B.S.music.vol); e.target.playVideo(); } catch (x) { /* bỏ qua */ } sync(); },
-          onStateChange: (e) => { st.playing = e.data === 1 || e.data === 3; sync(); },
-          onError: (e) => { st.err = ERR[e.data] || 'Không phát được nội dung này.'; st.playing = false; sync(); },
+          onStateChange: (e) => { st.playing = e.data === 1 || e.data === 3; if (B.audio) B.audio.youtube(e.data === 1); sync(); },
+          onError: (e) => { st.errCode = e.data; st.err = ERR[e.data] || 'Không phát được nội dung này.'; st.playing = false; sync(); },
         },
       });
-    }).catch(() => { st.err = 'Không tải được trình phát YouTube. Hãy kiểm tra kết nối mạng.'; sync(); });
+    }).catch((e) => { const m = (e && e.message) || ''; st.err = /offline|timeout/.test(m) ? 'Không tải được trình phát YouTube. Hãy kiểm tra kết nối mạng.' : 'Không khởi tạo được trình phát YouTube.'; st.errDetail = m; sync(); });
     if (B.ui.state.tab === 'focus') B.ui.renderTabs();
     return true;
   }
@@ -90,6 +90,12 @@
     const tg = mp.querySelector('[data-mp=toggle]'), mu = mp.querySelector('[data-mp=mute]');
     if (tg) tg.innerHTML = ic(st.playing ? 'pause' : 'play');
     if (mu) mu.innerHTML = ic(st.muted ? 'mute' : 'volume');
+    // Khi lỗi: gỡ khung phát (không để một iframe vô hình), hiện lời giải thích và lối ra rõ ràng
+    if (st.err && !mp.classList.contains('has-err')) {
+      call('destroy'); st.yt = null; st.ytReady = false;
+      const v = mp.querySelector('.mp-video');
+      if (v) v.outerHTML = `<div class="mp-error"><strong>Không phát được ở đây</strong><span>${esc(st.err)}${st.errCode ? ` (mã ${st.errCode})` : ''}</span><a class="mini" href="${watchUrl(st.cur)}" target="_blank" rel="noopener">Mở trên YouTube</a></div>`;
+    }
     mp.classList.toggle('has-err', !!st.err);
     if (B.ui.state.tab === 'focus') { const box = $('#tab-focus .yt-now'); if (box) box.outerHTML = nowHTML(); }
   }
@@ -103,15 +109,14 @@
   /* ---------- Âm thanh nền: tự tạo bằng Web Audio, không cần mạng ---------- */
   const AMB = { rain: 'Mưa rơi', fire: 'Lò sưởi tí tách', brown: 'Tiếng ồn êm' };
   let ctx = null, master = null, noiseBuf = null;
+  // Âm nền của Góc tập trung đi qua kênh "Âm thanh môi trường" chung, nên chỉnh âm lượng ở một chỗ là đủ
   function audio() {
-    if (ctx) return ctx;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return null;
-    ctx = new AC();
-    master = ctx.createGain(); master.gain.value = B.S.music.ambVol / 100; master.connect(ctx.destination);
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const S = B.S;
+    if (B.audio && !B.audio.cfg().enabled) { B.audio.cfg().enabled = true; S.audio.enabled = true; B.store.save(); }
+    if (B.audio) B.audio.unlock();
+    ctx = B.audio ? B.audio.ensure() : null;
+    if (!ctx) return null;
+    master = B.audio.bus('ambience'); noiseBuf = B.audio.noise();
     return ctx;
   }
   function brownSource() {
@@ -216,7 +221,7 @@
       ${location.protocol === 'file:' ? '<p class="hint">Bạn đang mở ứng dụng trực tiếp từ tệp, nên YouTube thường từ chối phát nhúng. Muốn nghe nhạc ngay trong ứng dụng, hãy mở bằng tệp <b>Mở Hiên Nhà Bun.cmd</b> trong thư mục dự án. Lúc này vẫn có thể bấm "Mở trên YouTube" hoặc dùng âm thanh nền bên dưới.</p>' : ''}
       <h3 class="sec-title">Âm thanh nền <small>tạo ngay trên máy, không cần mạng</small></h3>
       <div class="amb">${Object.keys(AMB).map((k) => `<button class="pill ${st.amb[k] ? 'on' : ''}" data-amb="${k}" aria-pressed="${!!st.amb[k]}">${AMB[k]}</button>`).join('')}</div>
-      <div class="f-line"><span class="f-lbl">Âm lượng nền</span><input type="range" id="ambVol" min="0" max="100" value="${S.music.ambVol}" aria-label="Âm lượng âm thanh nền" style="flex:1"></div>
+      <div class="f-line"><span class="f-lbl">Âm lượng nền</span><input type="range" id="ambVol" min="0" max="100" value="${B.audio ? B.audio.cfg().ch.ambience.vol : S.music.ambVol}" aria-label="Âm lượng âm thanh môi trường" style="flex:1"></div><p class="hint" style="margin:0">Chỉnh chung với kênh Âm thanh môi trường. Nhạc nền, tiếng thú cưng và tiếng tương tác chỉnh riêng trong nút Âm thanh.</p>
       ${historyHTML()}`;
     tickClock();
   }
@@ -269,7 +274,7 @@
   function onInput(e) {
     const el = e.target;
     if (el.id === 'ytVol') { B.S.music.vol = +el.value; call('setVolume', +el.value); B.store.save(); }
-    else if (el.id === 'ambVol') { B.S.music.ambVol = +el.value; if (master) master.gain.value = +el.value / 100; B.store.save(); }
+    else if (el.id === 'ambVol') { B.S.music.ambVol = +el.value; if (B.audio) { B.audio.cfg().ch.ambience.vol = +el.value; B.audio.applyLevels(); } B.store.save(); }
     else if (el.id === 'fLen' && e.type === 'change') { st.len = U.clamp(Math.round(+el.value) || 25, 5, 180); B.ui.renderTabs(); }
     else if (el.id === 'fTask' && e.type === 'change') { st.pick = el.value; st.len = null; B.ui.renderTabs(); }
   }

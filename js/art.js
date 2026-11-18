@@ -45,6 +45,8 @@
     volume: '<path d="M4 10v4h3.5L12 18V6L7.5 10H4z"/><path d="M15.5 9.5a3.6 3.6 0 0 1 0 5M18 7a7 7 0 0 1 0 10"/>',
     mute: '<path d="M4 10v4h3.5L12 18V6L7.5 10H4z"/><path d="M16 10l4 4M20 10l-4 4"/>',
     scale: '<path d="M5 20h14M7 20l1.5-12h7L17 20"/><path d="M9.5 8a2.5 2.5 0 0 1 5 0M12 12.5v2.5"/>',
+    move: '<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>',
+    speaker: '<path d="M4 10v4h3.5L12 18V6L7.5 10H4z"/><path d="M15.5 9.5a3.6 3.6 0 0 1 0 5M18 7a7 7 0 0 1 0 10"/>',
     users: '<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><path d="M15.5 6.2a3 3 0 0 1 0 5.6M17 14.6c1.8.6 3 2 3.5 4.4"/>',
   };
   B.icon = (name, cls) =>
@@ -110,6 +112,7 @@
       <g class="face">
         <path d="M-5,-43.5 C-6,-26 -9,-14 -20,-2 C-32,10 -28,30 0,36 C28,30 32,10 20,-2 C9,-14 6,-26 5,-43.5Z" fill="${CREAM}"/>
         <ellipse cx="-21" cy="-9" rx="9.5" ry="7.5" fill="${FUR_D}" opacity=".35"/><ellipse cx="21" cy="-9" rx="9.5" ry="7.5" fill="${FUR_D}" opacity=".35"/>
+        <g class="brows"><path d="M-30,-17 Q-22,-19 -12,-25" stroke="${FUR_D}" stroke-width="3.2" fill="none" stroke-linecap="round"/><path d="M12,-25 Q22,-19 30,-17" stroke="${FUR_D}" stroke-width="3.2" fill="none" stroke-linecap="round"/></g>
         <g class="eyes eyes-open"><circle cx="-20" cy="-8" r="5.6" fill="${EYE}"/><circle cx="-18.3" cy="-10" r="1.9" fill="#fff"/><circle cx="20" cy="-8" r="5.6" fill="${EYE}"/><circle cx="21.7" cy="-10" r="1.9" fill="#fff"/></g>
         <g class="eyes eyes-closed"><path d="M-26,-8 Q-20,-3 -14,-8 M14,-8 Q20,-3 26,-8" stroke="${EYE}" stroke-width="2.6" fill="none" stroke-linecap="round"/></g>
         <g class="eyes eyes-happy"><path d="M-26,-6 Q-20,-13 -14,-6 M14,-6 Q20,-13 26,-6" stroke="${EYE}" stroke-width="2.8" fill="none" stroke-linecap="round"/></g>

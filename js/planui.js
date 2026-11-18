@@ -8,8 +8,8 @@
 
   /* ---------- Biểu mẫu nhập việc ---------- */
   function newForm(date, task) {
-    if (task) return { id: task.id, date: task.date, title: task.title, est: task.est, priority: task.priority, cat: task.cat, load: task.load, diff: task.diff, deadline: task.deadline || '', prefTime: task.prefTime || '', dod: task.dodAuto ? '' : task.dod || '', notes: task.notes || '', more: true, split: false };
-    return { id: null, date, title: '', est: 30, priority: 'i', cat: null, load: null, diff: 'med', deadline: '', prefTime: '', dod: '', notes: '', more: false, split: false };
+    if (task) return { id: task.id, date: task.date, title: task.title, est: task.est, priority: task.priority, cat: task.cat, load: task.load, diff: task.diff, deadline: task.deadline || '', prefTime: task.prefTime || '', dod: task.dodAuto ? '' : task.dod || '', notes: task.notes || '', more: true, split: false, shiftPref: task.shiftPref || 'auto' };
+    return { id: null, date, title: '', est: 30, priority: 'i', cat: null, load: null, diff: 'med', deadline: '', prefTime: '', dod: '', notes: '', more: false, split: false, shiftPref: arguments[2] || 'auto' };
   }
   function formHints(f) {
     const g = P().guess(f.title || ''), cat = f.cat || g.cat, load = f.load || g.load, est = +f.est || 30;
@@ -27,6 +27,7 @@
       <input type="text" name="title" maxlength="140" placeholder="Việc cần làm…" value="${esc(f.title)}" autocomplete="off" aria-label="Tên công việc">
       <div class="f-line"><span class="f-lbl">Thời lượng</span>${B.DURS.map((d) => pill('dur', d, d + '′', +f.est === d)).join('')}<input type="number" name="est" min="5" max="600" step="5" class="f-num ${custom ? 'on' : ''}" value="${custom ? f.est : ''}" placeholder="khác" aria-label="Số phút khác"></div>
       <div class="pri-pills" role="group" aria-label="Mức ưu tiên">${B.PRI_ORDER.map((p) => pill('pri', p, B.PRI[p].short, f.priority === p, 'p-' + p)).join('')}</div>
+      <div class="f-line" role="group" aria-label="Ca làm việc"><span class="f-lbl">Ca</span>${[['auto', 'Bun tự xếp'], ['am', 'Ca sáng'], ['pm', 'Ca chiều tối']].map((x) => pill('shiftp', x[0], x[1], (f.shiftPref || 'auto') === x[0])).join('')}</div>
       <p class="f-scope">${scopeLine(f, h)}</p>
       ${h.learned ? `<p class="f-learn">${ic('timer')}<span>Việc thuộc "${esc(h.cat)}" của bạn thường mất khoảng ${h.learned.ratio.toFixed(1).replace('.', ',')} lần dự kiến.</span><button type="button" class="btn soft sm" data-dur="${h.learned.est}">Dùng ${h.learned.est}′</button></p>` : ''}
       <button type="button" class="f-more" data-more aria-expanded="${f.more}">${ic('chevron')}${f.more ? 'Ẩn bớt chi tiết' : `Thêm chi tiết <small class="f-guess">Bun đoán: ${esc(h.cat)} · ${B.LOADS[h.load]}</small>`}</button>
@@ -47,13 +48,14 @@
     const title = f.title.trim(), inp = $('#panel .task-form input[name=title]');
     if (!title) { if (inp) { inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); inp.focus(); } return; }
     const est = U.clamp(Math.round(+f.est || 30), 5, 600);
-    const data = { title, est, priority: f.priority, cat: f.cat || undefined, load: f.load || undefined, diff: f.diff, deadline: f.deadline || null, prefTime: f.prefTime || null, dod: f.dod, notes: f.notes, date: f.date };
+    const data = { title, est, priority: f.priority, cat: f.cat || undefined, load: f.load || undefined, diff: f.diff, deadline: f.deadline || null, prefTime: f.prefTime || null, dod: f.dod, notes: f.notes, date: f.date, shiftPref: f.shiftPref || 'auto' };
+    st.watch = true; // báo cho người dùng nếu lịch phải xếp lại vì thay đổi này
     if (f.cat && B.CATS.indexOf(f.cat) < 0 && (B.S.plan.cats || []).indexOf(f.cat) < 0) B.S.plan.cats = (B.S.plan.cats || []).concat([f.cat]).slice(-8);
     if (!f.id && f.split && est <= 90) data.steps = P().makeSteps(title, est, est >= 60 ? 30 : 15);
     const res = f.id ? B.tasks.update(f.id, data) : B.tasks.add(data);
     if (res && res.capped) B.ui.toast('Mỗi ngày chỉ nên có ba việc Gấp & Quan trọng. Việc này được xếp vào mức Quan trọng.', { icon: 'star', ms: 5500 });
     if (res && !f.id && res.task.steps.length) B.ui.toast(`Đã chia "${esc(res.task.title)}" thành ${res.task.steps.length} bước nhỏ. Bạn chỉ cần làm từng bước một.`, { icon: 'list', ms: 5500 });
-    st.form = f.id ? null : newForm(f.date);
+    st.form = f.id ? null : newForm(f.date, null, f.shiftPref);
     st.focusForm = !f.id;
     B.ui.renderTabs();
   }
@@ -73,7 +75,8 @@
   function blockRow(b, date, isToday) {
     const t = B.tasks.get(b.taskId);
     if (!t) return '';
-    if (st.form && st.form.id === t.id) return formHTML();
+    // Việc nhiều bước có nhiều khối: biểu mẫu sửa chỉ hiện ở khối đầu tiên
+    if (st.form && st.form.id === t.id) { if (st.formShown) return ''; st.formShown = true; return formHTML(); }
     const step = b.stepId && t.steps.find((s) => s.id === b.stepId), running = B.S.focus && B.S.focus.taskId === t.id && B.S.focus.kind !== 'break' && (!b.stepId || B.S.focus.stepId === b.stepId);
     const pv = isToday ? B.tasks.preview(t, true).coins : Math.round(B.PRI[t.priority].coins * B.RULES.planBonus);
     const nSteps = t.steps.length, doneSteps = t.steps.filter((s) => s.done).length;
@@ -101,9 +104,29 @@
         ${ask ? `<div class="blk-menu"><span class="f-lbl">Mất bao lâu?</span><button class="mini" data-actual="${Math.max(5, Math.round(est * 0.75))}">Nhanh hơn</button><button class="mini" data-actual="${est}">Khoảng ${est}′</button><button class="mini" data-actual="${Math.round(est * 1.5)}">Lâu hơn</button><input type="number" class="f-num on" min="1" max="600" placeholder="phút" aria-label="Số phút thực tế" data-actualinput></div>` : ''}</div>
       <div class="t-actions"><button data-act="del" title="Xóa" aria-label="Xóa">${ic('trash')}</button></div></li>`;
   }
-  function looseRow(t, kind, isToday) {
-    return `<li class="task loose p-${t.priority}" data-id="${t.id}"><span class="dot"></span><div class="t-main"><div class="t-title">${esc(t.title)}</div><div class="t-meta">${chips(t, [`<span class="chip-c">${dur(P().remainingOf(t))}</span>`])}</div>
+  function looseRow(t, kind, isToday, why) {
+    if (st.form && st.form.id === t.id) { if (st.formShown) return ''; st.formShown = true; return formHTML(); }
+    return `<li class="task loose p-${t.priority}" data-id="${t.id}"><span class="dot"></span><div class="t-main"><div class="t-title">${esc(t.title)}</div><div class="t-meta">${chips(t, [`<span class="chip-c">${dur(P().remainingOf(t))}</span>`])}</div>${why ? `<div class="t-why">${esc(why)}</div>` : ''}
       <div class="blk-menu">${kind === 'skip' ? '<button class="mini" data-act="unskip">Làm lại hôm nay</button>' : '<button class="mini" data-act="half">Chỉ làm 30′</button><button class="mini" data-act="minus">−15′</button>'}${isToday ? '<button class="mini" data-act="tomorrow">Dời sang mai</button>' : ''}<button class="mini" data-act="edit">Sửa</button><button class="mini" data-act="del">Xóa</button></div></div></li>`;
+  }
+
+  /* ---------- Báo cho người dùng khi lịch tự xếp lại ---------- */
+  // So lịch mới với lịch vừa hiển thị: việc nào vừa được xếp vào, việc nào bị đẩy ra "Chưa xếp vừa"
+  function noticeChanges(date, plan) {
+    const snap = (st.snap = st.snap || {}), prev = snap[date], placed = {}, over = {};
+    plan.blocks.forEach((b) => { if (b.type === 'task' && placed[b.taskId] == null) placed[b.taskId] = b.s; });
+    plan.overflow.forEach((x) => (over[x.taskId] = 1));
+    snap[date] = { placed, over, madeAt: plan.madeAt };
+    const moved = [];
+    if (!prev || prev.madeAt === plan.madeAt || !st.watch) return moved;
+    st.watch = false;
+    const inT = Object.keys(placed).filter((id) => prev.over[id]), outT = Object.keys(over).filter((id) => prev.placed[id] != null);
+    const name = (id) => { const t = B.tasks.get(id); return t ? `"${esc(t.title)}"` : ''; };
+    const parts = [];
+    if (inT.length) parts.push(`${inT.map((id) => `${name(id)} vào ${P().fmtMin(placed[id])}`).join(', ')}`);
+    if (outT.length) parts.push(`${outT.map(name).join(', ')} chuyển sang Chưa xếp vừa`);
+    if (parts.length) B.ui.toast(`<b>Bun đã xếp lại lịch:</b> ${parts.join('; ')}.`, { icon: 'list', ms: 6500 });
+    return inT;
   }
 
   /* ---------- Vẽ cả ngày ---------- */
@@ -111,7 +134,9 @@
     const S = B.S, today = B.time.today(), isToday = date === today, plan = P().get(date), noon = P().toMin(S.plan.noonAt);
     const all = S.tasks.filter((t) => t.date === date), done = all.filter((t) => t.done), stt = B.tasks.stats(date);
     const pct = Math.round(stt.rate * 100), left = B.tasks.fullSlotsLeft(), late = isToday ? P().lateBy() : 0, dp = P().dayState(date);
-    const adding = st.form && !st.form.id && st.form.date === date;
+    const adding = st.form && !st.form.id && st.form.date === date, addAt = adding ? st.form.at || 'top' : null;
+    st.formShown = false;
+    const moved = noticeChanges(date, plan);
     let head;
     if (isToday) {
       const sub = !stt.total ? 'Thêm vài việc, Bun sẽ gợi ý thứ tự và giờ làm.' : stt.done === stt.total ? 'Xong hết rồi. Bun đang rất vui.' : `${dur(plan.stats.work)} việc còn lại, dự kiến xong lúc ${P().fmtMin(plan.stats.end)}.${left > 0 ? '' : ' Đã hết lượt thưởng đầy đủ.'}`;
@@ -131,18 +156,29 @@
     const doneOf = (sh) => done.filter((t) => t.shift === sh).sort((a, b) => a.doneAt - b.doneAt).map(doneRow).join('');
     const section = (sh, label, sub) => {
       const d = isToday ? doneOf(sh) : '', n = plan.blocks.filter((b) => b.type === 'task' && (b.s < noon) === (sh === 'am')).length, dn = done.filter((t) => t.shift === sh).length;
-      if (!d && !rows[sh] && isToday && sh === 'am' && P().nowMin() >= noon) return '';
+      const formHere = addAt === sh ? `<ul class="tasks">${formHTML()}</ul>` : '';
+      const amOver = isToday && sh === 'am' && P().nowMin() >= noon;
+      if (!d && !rows[sh] && amOver && !formHere) return '';
+      const addBtn = formHere || amOver ? '' : `<button class="add-task" data-add data-date="${date}" data-shift="${sh}">${ic('plus')}Thêm việc vào ${sh === 'am' ? 'ca sáng' : 'ca chiều tối'}</button>`;
       return `<section class="shift"><header><span class="sh-ic">${ic(sh === 'am' ? 'sun' : 'moon')}</span><h3>${label}</h3><small>${sub}</small><span class="grow"></span>${n + dn ? `<span class="sh-count">${isToday ? dn + '/' : ''}${n + dn}</span>` : ''}</header>
-        <ul class="tasks sched" data-date="${date}">${d}${rows[sh]}</ul>${!d && !rows[sh] ? `<p class="empty">${sh === 'am' ? 'Chưa có khối việc nào cho buổi sáng.' : 'Chưa có khối việc nào cho buổi chiều tối.'}</p>` : ''}</section>`;
+        <ul class="tasks sched" data-date="${date}">${d}${rows[sh]}</ul>${!d && !rows[sh] && !formHere ? `<p class="empty">${sh === 'am' ? 'Chưa có khối việc nào cho buổi sáng.' : 'Chưa có khối việc nào cho buổi chiều tối.'}</p>` : ''}${formHere}${addBtn}</section>`;
     };
     const overIds = [], over = plan.overflow.filter((x) => (overIds.indexOf(x.taskId) < 0 ? overIds.push(x.taskId) : false)).map((x) => B.tasks.get(x.taskId)).filter(Boolean);
+    const endLabel = P().fmtMin(plan.endMin);
+    // Giải thích vì sao từng việc chưa xếp vừa
+    const whyOver = (t) => {
+      const need = P().remainingOf(t), free = Math.max(0, plan.endMin - plan.stats.end);
+      if (free >= need) return `Cần ${dur(need)} liền mạch, nhưng các khoảng trống còn lại bị giờ ăn hoặc giờ hẹn chia nhỏ.`;
+      return `Cần ${dur(need)}, nhưng sau các việc ưu tiên hơn chỉ còn ${dur(free)} trước ${endLabel}.`;
+    };
     const skipped = all.filter((t) => !t.done && t.skipped === date);
     const noonBtn = isToday && P().nowMin() >= noon ? `<button class="btn soft" data-noon>${ic('sun')}Nhìn lại buổi sáng</button>` : '';
-    el.innerHTML = head + lateBar + tools + (adding ? `<ul class="tasks">${formHTML()}</ul>` : '') + why + section('am', 'Ca sáng', `trước ${S.plan.noonAt}`) + section('pm', 'Ca chiều tối', `từ ${S.plan.noonAt}`)
-      + (over.length ? `<section class="shift"><header><h3>Chưa xếp vừa ${isToday ? 'hôm nay' : 'ngày mai'}</h3><small>quỹ thời gian không đủ</small></header><ul class="tasks">${over.map((t) => looseRow(t, 'over', isToday)).join('')}</ul></section>` : '')
+    el.innerHTML = head + lateBar + tools + (addAt === 'top' ? `<ul class="tasks">${formHTML()}</ul>` : '') + why + section('am', 'Ca sáng', `trước ${S.plan.noonAt}`) + section('pm', 'Ca chiều tối', `từ ${S.plan.noonAt}`)
+      + (over.length ? `<section class="shift"><header><h3>Chưa xếp vừa ${isToday ? 'hôm nay' : 'ngày mai'}</h3><small>ngày kết thúc lúc ${endLabel}</small></header><ul class="tasks">${over.map((t) => looseRow(t, 'over', isToday, whyOver(t))).join('')}</ul></section>` : '')
       + (skipped.length ? `<section class="shift"><header><h3>Để sau</h3><small>đã bỏ qua hôm nay</small></header><ul class="tasks">${skipped.map((t) => looseRow(t, 'skip', isToday)).join('')}</ul></section>` : '')
       + (isToday ? `<div class="tab-foot">${noonBtn}<button class="btn soft" data-summary>${ic('moon')}Tổng kết ngày</button></div><p class="hint">Kéo thả để đổi thứ tự. Sáu việc đầu mỗi ngày nhận đủ thưởng; xong trong thời gian đã định được thưởng thêm.</p>` : '<p class="hint">Đây là lịch dự kiến. Sáng mai Bun sẽ tính lại theo giờ bạn thực sự bắt đầu.</p>');
     st.justDone = null;
+    moved.forEach((id) => $$(`.blk[data-id="${id}"]`, el).forEach((r) => r.classList.add('just-moved')));
     const inp = $('.task-form input[name=title]', el);
     if (inp && st.focusForm) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
     st.focusForm = false;
@@ -185,10 +221,11 @@
   function onClick(e) {
     const t = e.target, q = (s) => t.closest(s);
     let m;
-    if ((m = q('[data-add]')) && m.dataset.date) { st.form = newForm(m.dataset.date); st.focusForm = true; st.menu = null; return done(); }
+    if ((m = q('[data-add]')) && m.dataset.date) { const sh = m.dataset.shift || null; st.form = newForm(m.dataset.date, null, sh || 'auto'); st.form.at = sh || 'top'; st.focusForm = true; st.menu = null; return done(); }
     if (q('[data-cancel]')) { st.form = null; return done(); }
     if (st.form) {
       const f = st.form;
+      if ((m = q('[data-shiftp]'))) { f.shiftPref = m.dataset.shiftp; return done(true); }
       if ((m = q('[data-pri]'))) { f.priority = m.dataset.pri; return done(true); }
       if ((m = q('[data-dur]'))) { f.est = +m.dataset.dur; return done(true); }
       if (q('[data-more]')) { f.more = !f.more; return done(true); }
@@ -200,7 +237,7 @@
     if (q('[data-relate]')) { P().apply(P().propose('late')); B.ui.toast('Đã sắp lại phần còn lại của ngày, bắt đầu từ bây giờ.', { icon: 'timer' }); return true; }
     if ((m = q('[data-auto]'))) { P().autoOrder(m.dataset.date); return true; }
     if ((m = q('[data-addbusy]'))) { openBusy(m.dataset.date); return true; }
-    if ((m = q('[data-delbusy]'))) { P().removeBusy(m.dataset.date, m.dataset.delbusy); return true; }
+    if ((m = q('[data-delbusy]'))) { st.watch = true; P().removeBusy(m.dataset.date, m.dataset.delbusy); return true; }
     if (q('[data-plansettings]')) { openPlanSettings(); return true; }
     if (q('[data-noon]')) { openNoon(true); return true; }
     if ((m = q('[data-actual]'))) { const row = q('.task'); recordActual(row.dataset.id, +m.dataset.actual); return true; }
@@ -208,6 +245,8 @@
     if (!act || !row) return false;
     const id = row.dataset.id, key = row.dataset.key || id, task = B.tasks.get(id), date = task ? task.date : B.time.today(), a = act.dataset.act;
     if (!task) return true;
+    // Mọi thao tác làm thay đổi lịch: theo dõi để báo nếu việc khác được xếp lại
+    if (['toggle', 'del', 'minus', 'plus', 'steps', 'half', 'up', 'down', 'skip', 'unskip', 'tomorrow', 'totoday'].indexOf(a) >= 0) st.watch = true;
     if (a === 'toggle') completeBlock(row, act);
     else if (a === 'menu') { st.menu = st.menu === key ? null : key; done(); }
     else if (a === 'start') startBlock(task, row.dataset.step);
@@ -264,7 +303,7 @@
       if (!st.drag || !r) return;
       e.preventDefault();
       const t = B.tasks.get(r.dataset.id);
-      if (t && r.dataset.key !== st.drag) moveKey(t.date, st.drag, 0, r.dataset.key);
+      if (t && r.dataset.key !== st.drag) { st.watch = true; } if (t && r.dataset.key !== st.drag) moveKey(t.date, st.drag, 0, r.dataset.key);
       st.drag = null;
     });
   }
@@ -340,7 +379,7 @@
       <div class="f-line"><label class="f-lbl" for="bS">Từ</label><input type="time" id="bS" value="${P().fmtMin(Math.ceil(now / 30) * 30)}"><label class="f-lbl" for="bE">đến</label><input type="time" id="bE" value="${P().fmtMin(Math.ceil(now / 30) * 30 + 60)}"></div>
       <input type="text" id="bT" class="f-txt on" style="width:100%;margin-top:8px" maxlength="40" placeholder="Ví dụ: học trên lớp, đi khám, gặp bạn">
       <div class="row end"><button class="btn ghost" data-close>Thôi</button><button class="btn primary" data-ok data-autofocus>Thêm</button></div>` });
-    m.body.addEventListener('click', (e) => { if (!e.target.closest('[data-ok]')) return; const s = P().toMin($('#bS', m.body).value); P().addBusy(date, { title: $('#bT', m.body).value.trim() || 'Việc đã hẹn', s, e: Math.max(s + 10, P().toMin($('#bE', m.body).value)) }); m.close(); });
+    m.body.addEventListener('click', (e) => { if (!e.target.closest('[data-ok]')) return; const s = P().toMin($('#bS', m.body).value); st.watch = true; P().addBusy(date, { title: $('#bT', m.body).value.trim() || 'Việc đã hẹn', s, e: Math.max(s + 10, P().toMin($('#bE', m.body).value)) }); m.close(); });
   }
   function openPlanSettings() {
     const S = B.S, p = S.plan, pat = `${p.focusLen}/${p.breakLen}`;
@@ -368,7 +407,7 @@
   /* ---------- Nhìn lại buổi sáng (mốc 12 giờ) ---------- */
   function shouldOpenNoon() {
     const S = B.S, now = P().nowMin();
-    return S.plan.noonOn && !S.day.noonDone && !S.bun.away && now >= P().toMin(S.plan.noonAt) && now < 20 * 60 && !S.focus && !B.ui.state.modals.length && S.seenIntro;
+    return S.plan.noonOn && !S.day.noonDone && !S.bun.away && !(B.walk && B.walk.state.on) && now >= P().toMin(S.plan.noonAt) && now < 20 * 60 && !S.focus && !B.ui.state.modals.length && S.seenIntro;
   }
   function openNoon(manual) {
     const S = B.S;

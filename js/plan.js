@@ -121,7 +121,10 @@
     const withBreaks = (est) => (est > focusLen + 10 ? est + (Math.ceil(est / focusLen) - 1) * breakLen : est);
     const nextObs = () => obs.find((x) => !x.used && x.e > cursor);
     const free = () => { let f = Math.max(0, endMin - cursor); obs.forEach((x) => { const s = Math.max(x.s, cursor), e = Math.min(x.e, endMin); if (e > s) f -= e - s; }); return Math.max(0, f); };
-    const cands = (maxLen) => { const seen = {}; return remaining.filter((u) => { if (u.step) { if (seen[u.task.id]) return false; seen[u.task.id] = 1; } return !maxLen || withBreaks(u.est) <= maxLen; }); };
+    const NOON = toMin(P.noonAt);
+    // Việc chọn "Ca chiều tối" không bao giờ bắt đầu trước giờ trưa
+    const shiftOk = (u) => u.task.shiftPref !== 'pm' || cursor >= NOON;
+    const cands = (maxLen) => { const seen = {}; return remaining.filter((u) => { if (!shiftOk(u)) return false; if (u.step) { if (seen[u.task.id]) return false; seen[u.task.id] = 1; } return !maxLen || withBreaks(u.est) <= maxLen; }); };
     function reasonFor(u) {
       const t = u.task, deep = t.load === 'deep';
       if (t.deadline && t.deadline < date) return 'Đã quá hạn, nên xử lý sớm';
@@ -161,6 +164,8 @@
           }
         }
         if (cursor < 720 && deep) s += t.diff === 'hard' ? 18 : 12;
+        if (t.shiftPref === 'am') { s += cursor < NOON ? 45 : 20; if (cursor < NOON) why = 'Bạn đã chọn làm việc này vào ca sáng'; }
+        if (t.shiftPref === 'pm' && cursor >= NOON) { s += 25; why = why || 'Bạn đã chọn làm việc này vào ca chiều tối'; }
         if (cursor >= 780 && cursor < 870 && !deep) s += 12;
         if (cursor >= 1200 && deep) s -= 20;
         if (energy === 'low' && deep && !isEss) s -= 18;
@@ -196,7 +201,11 @@
       if (!remaining.length) { if (ob) { cursor = ob.s; useObs(ob); continue; } break; }
       const gap = ob ? ob.s - cursor : Infinity;
       let p = pick();
-      if (!p) break;
+      if (!p) {
+        // Chỉ còn việc của ca chiều tối: nhảy tới giờ trưa rồi xếp tiếp
+        if (cursor < NOON && remaining.some((u) => u.task.shiftPref === 'pm')) { cursor = NOON; prev = null; deepStreak = 0; continue; }
+        break;
+      }
       if (withBreaks(p.u.est) > gap) {
         const filler = gap >= 15 ? pick(gap) : null;
         if (filler) p = { u: filler.u, reason: manual ? filler.reason : 'Vừa khít khoảng trống trước ' + (ob.type === 'meal' ? 'giờ ăn' : 'việc đã hẹn') };
@@ -228,7 +237,7 @@
   }
   function signature(date) {
     const dp = dayState(date);
-    return units(date).map((u) => u.key + '.' + u.est + '.' + u.task.priority + (u.task.prefTime || '') + u.task.load).join('|') + '#' + (dp.order || []).join(',') + '#' + (dp.busy || []).map((b) => b.s + '-' + b.e).join(',') + '#' + dp.energy + '#' + dp.endMin + '#' + JSON.stringify([B.S.plan.dayStart, B.S.plan.dayEnd, B.S.plan.focusLen, B.S.plan.breakLen, B.S.plan.lunchAt, B.S.plan.lunchMin, B.S.plan.dinnerAt, B.S.plan.dinnerMin]);
+    return units(date).map((u) => u.key + '.' + u.est + '.' + u.task.priority + (u.task.prefTime || '') + u.task.load + (u.task.shiftPref || '')).join('|') + '#' + (dp.order || []).join(',') + '#' + (dp.busy || []).map((b) => b.s + '-' + b.e).join(',') + '#' + dp.energy + '#' + dp.endMin + '#' + JSON.stringify([B.S.plan.dayStart, B.S.plan.dayEnd, B.S.plan.focusLen, B.S.plan.breakLen, B.S.plan.lunchAt, B.S.plan.lunchMin, B.S.plan.dinnerAt, B.S.plan.dinnerMin]);
   }
   function rebuild(date) {
     date = date || B.time.today();

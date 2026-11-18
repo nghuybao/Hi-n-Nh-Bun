@@ -16,7 +16,9 @@
     simStep(h, rest) {
       const b = B.S.bun, st = b.stats;
       if (b.frame == null) { b.frame = 1; b.bcs = 4.5; b.diet = 1; b.wlog = []; }
-      if (rest || st.hunger > 30) b.frame = Math.min(3, b.frame + (3 - b.frame) * (h / (24 * 45)) * U.clamp(b.diet, 0.5, 1.25) * (0.6 + 0.4 * B.nutri.health() / 100));
+      // Căng thẳng cao kéo dài làm Bun ngừng lớn (trên 50 bắt đầu chậm lại, từ 90 thì dừng hẳn)
+      const calm = U.clamp(1 - ((b.stress || 0) - 50) / 40, 0, 1);
+      if (rest || st.hunger > 30) b.frame = Math.min(3, b.frame + (3 - b.frame) * (h / (24 * 45)) * U.clamp(b.diet, 0.5, 1.25) * (0.6 + 0.4 * B.nutri.health() / 100) * calm);
       if (!rest) {
         if (st.hunger < 12) b.bcs -= 0.008 * h; // đói kéo dài: gầy đi dần
         else if (st.hunger > 104) b.bcs += 0.012 * h; // ăn quá no: tích mỡ dần
@@ -71,7 +73,9 @@
       else return { ok: false, reason: 'coins', need: f.price - S.coins };
       if (f.hunger) st.hunger = U.clamp(st.hunger + f.hunger, 0, 125);
       if (f.thirst) st.thirst = U.clamp(st.thirst + f.thirst, 0, 100);
+      const wasHungry = st.hunger - (f.hunger || 0) < 60;
       st.joy = U.clamp(st.joy + (f.joy || 0), 0, 100);
+      B.calm(drink ? 1 : wasHungry ? 4 : 0);
       if (drink) S.bun.counters.water++;
       else {
         S.bun.counters.feed++;
@@ -89,18 +93,33 @@
       if (r.ok) { const b = B.S.bun; b.bcs += (4.5 - b.bcs) * 0.05; B.store.save(); }
       return r;
     },
-    walk() {
-      const S = B.S, st = S.bun.stats, now = B.now();
-      if (st.energy < 20) return { ok: false, reason: 'tired' };
-      if (S.lastWalk && now - S.lastWalk < 2 * 3600000) return { ok: false, reason: 'recent' };
+    // Có đi dạo được không (gọi trước khi mở cảnh ngoài trời)
+    canWalk() {
+      const S = B.S, st = S.bun.stats;
+      if (S.bun.away) return { ok: false, reason: 'away' };
+      if (st.energy < 15) return { ok: false, reason: 'tired' };
+      return { ok: true, recent: !!(S.lastWalk && B.now() - S.lastWalk < 2 * 3600000) };
+    },
+    // Kết thúc một buổi đi dạo. frac: quãng đường đã đi (0–1), spots: số chỗ Bun đã khám phá.
+    // Đi càng xa lợi ích càng nhiều; đi dạo dày đặc trong 2 giờ chỉ được một nửa để không thể "cày" chỉ số.
+    walk(o) {
+      o = o || {};
+      const S = B.S, b = S.bun, st = b.stats, now = B.now(), frac = U.clamp(o.frac == null ? 1 : o.frac, 0, 1), spots = o.spots || 0;
+      const recent = !!(S.lastWalk && now - S.lastWalk < 2 * 3600000), k = (0.35 + 0.65 * frac) * (recent ? 0.5 : 1);
+      const before = { joy: st.joy, energy: st.energy, stress: b.stress || 0, hunger: st.hunger, thirst: st.thirst };
       S.lastWalk = now; S.day.walks++;
-      st.joy = U.clamp(st.joy + 16, 0, 100); st.energy = U.clamp(st.energy - 14, 0, 100); st.hunger = U.clamp(st.hunger - 6, 0, 125); st.thirst = U.clamp(st.thirst - 9, 0, 100);
-      S.bun.bcs += (4.5 - S.bun.bcs) * 0.12;
-      S.bun.counters.play++;
+      st.joy = U.clamp(st.joy + 16 * k + Math.min(8, spots * 2), 0, 100);
+      st.energy = U.clamp(st.energy - (3 + 15 * frac), 0, 100);
+      st.hunger = U.clamp(st.hunger - 7 * frac, 0, 125);
+      st.thirst = U.clamp(st.thirst - 10 * frac, 0, 100);
+      b.stress = U.clamp((b.stress || 0) - 22 * k, 0, 100);
+      b.bcs += (4.5 - b.bcs) * 0.14 * k;
+      b.counters.play++; b.counters.walks = (b.counters.walks || 0) + 1;
       B.addBond(2, true); B.care();
-      B.mem.add({ key: 'first_walk', icon: 'paw', title: 'Lần đầu đi dạo', text: 'Bun kéo bạn đi một vòng quanh xóm, ngửi từng gốc cây.' });
+      B.mem.add({ key: 'first_walk', icon: 'paw', title: 'Lần đầu đi dạo', text: 'Bun kéo bạn đi một vòng công viên, ngửi từng khóm hoa.' });
       B.store.save(); B.emit('change');
-      return { ok: true };
+      const d = (n) => Math.round(n);
+      return { ok: true, recent, delta: { joy: d(st.joy - before.joy), energy: d(st.energy - before.energy), stress: d((b.stress || 0) - before.stress), hunger: d(st.hunger - before.hunger), thirst: d(st.thirst - before.thirst) } };
     },
   });
 

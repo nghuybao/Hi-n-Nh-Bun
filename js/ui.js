@@ -192,7 +192,8 @@
     const S = B.S, tab = ui.shopTab;
     let html = `<div class="row" style="margin-bottom:12px"><span class="wallet">${ic('coin')}${S.coins} xu</span><span class="hint" style="margin:0">Mỗi món mua về đều xuất hiện trong phòng.</span></div>
       <div class="seg" role="tablist">${B.SHOP_TABS.map((t) => `<button data-stab="${t.id}" class="${t.id === tab ? 'on' : ''}">${t.label}</button>`).join('')}</div>`;
-    if (tab === 'pantry' || tab === 'friends') return html + B.worldui.shopTab(tab);
+    if (tab === 'friends') return html + B.pets.shopHTML();
+    if (tab === 'pantry') return html + B.worldui.shopTab(tab);
     if (tab === 'house') {
       html += '<div class="house-list">' + B.HOUSE.map((h) => {
         const cur = h.level === S.house.level, own = h.level <= S.house.level, next = h.level === S.house.level + 1;
@@ -222,7 +223,7 @@
     m.body.addEventListener('click', (e) => {
       const st = e.target.closest('[data-stab]'), buy = e.target.closest('[data-buy]'), use = e.target.closest('[data-use]');
       if (st) { ui.shopTab = st.dataset.stab; return draw(); }
-      if (B.worldui.shopClick(e, draw)) return;
+      if (B.pets.shopClick(e, draw) || B.worldui.shopClick(e, draw)) return;
       if (buy) {
         const it = B.item(buy.dataset.buy), r = B.shop.buy(it.id);
         if (!r.ok) return toast(r.reason === 'coins' ? `Còn thiếu ${it.price - B.S.coins} xu để mua ${it.name.toLowerCase()}.` : 'Chưa mua được món này.', { icon: 'coin' });
@@ -424,7 +425,7 @@
   /* ---------- Quà bất ngờ ---------- */
   function surprise() {
     const S = B.S, now = B.now(), bs = B.bun.state;
-    if (S.bun.away || S.focus || ui.modals.length || now - S.lastSurprise < 4 * HOUR || bs.pose === 'sleep' || bs.busy) return false;
+    if (S.bun.away || S.focus || (B.walk && B.walk.state.on) || ui.modals.length || now - S.lastSurprise < 4 * HOUR || bs.pose === 'sleep' || bs.busy) return false;
     S.lastSurprise = now;
     const pool = B.TREASURES.filter((t) => S.treasures.indexOf(t.id) < 0);
     if (pool.length && Math.random() < 0.55) {
@@ -460,7 +461,7 @@
       else { closePopover(); if (a === 'pet') B.bun.pet(); else if (a === 'call') B.bun.call(); else if (a === 'focus') openFocus(); }
     });
     $('#popover').addEventListener('click', (e) => { const f = e.target.closest('[data-food]'); if (f) { closePopover(); B.worldui.feed(f.dataset.food); } });
-    $('#svgActors').addEventListener('click', closePopover);
+    $('#svgActors').addEventListener('click', (e) => { if (!e.target.closest('.friend')) closePopover(); });
     $('#btnShop').addEventListener('click', () => openShop());
     $('#btnJournal').addEventListener('click', openJournal);
     $('#btnSettings').addEventListener('click', openSettings);

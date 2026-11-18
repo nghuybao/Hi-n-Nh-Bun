@@ -30,7 +30,7 @@
     const win = { cx: Math.round(W * 0.43), w: lvl >= 3 ? 300 : 220, top: 150, bot: 372 };
     win.x1 = win.cx - win.w / 2; win.x2 = win.cx + win.w / 2;
     const desk = { x: 26, w: 226, top: 412 };
-    return {
+    const lay = {
       W, H, top: bottom - H, bottom, lvl, win, desk,
       deskLamp: { x: desk.x + 82, y: desk.top - 60 },
       jar: { x: desk.x + desk.w - 16, y: desk.top - 18 },
@@ -44,6 +44,17 @@
       toys: { toy_ball: { x: Math.round(W * 0.57), y: 776 }, toy_rope: { x: Math.round(W * 0.86), y: 760 }, toy_duck: { x: Math.round(W * 0.3), y: 612 } },
       floor: { x1: 80, x2: W - 80, y1: 592, y2: 768 },
     };
+    // Vị trí người dùng đã kéo thả (lưu trong house.pos) đè lên vị trí mặc định
+    const ov = B.S.house.pos || {}, at = (k) => ov[k] && isFinite(ov[k].x) && isFinite(ov[k].y) ? { x: U.clamp(ov[k].x, 40, W - 40), y: U.clamp(ov[k].y, 560, 790) } : null;
+    let o;
+    if ((o = at('bed'))) { lay.bed.cx = o.x; lay.bed.cy = o.y; }
+    if ((o = at('rug'))) { lay.rug.cx = o.x; lay.rug.cy = o.y; }
+    if ((o = at('plant'))) { lay.plant.x = o.x; lay.plant.y = o.y; }
+    if ((o = at('lamp'))) { lay.lamp.x = o.x; lay.lamp.y = o.y; }
+    if ((o = at('bowlFood'))) { lay.bowls.fx = o.x; lay.bowls.fy = o.y; }
+    if ((o = at('bowlWater'))) { lay.bowls.wx = o.x; lay.bowls.wy = o.y; }
+    Object.keys(lay.toys).forEach((k) => { if ((o = at(k))) lay.toys[k] = { x: o.x, y: o.y }; });
+    return lay;
   }
 
   /* ---------- Từng phần của căn phòng ---------- */
@@ -196,17 +207,25 @@
   }
 
   function actorsSVG() {
-    const S = B.S, p = S.house.placed, bed = A.bed(p.bed || 'bed0');
-    let s = `<g id="rugG" transform="translate(${L.rug.cx},${L.rug.cy})">${A.rug(p.rug || 'rug0', L.rug.rx, L.rug.ry)}</g><g id="sorted">`;
-    s += `<g data-y="${L.bed.cy - 3}" transform="translate(${L.bed.cx},${L.bed.cy})"><ellipse cx="0" cy="16" rx="142" ry="14" fill="#000" opacity=".1"/>${bed.back}</g>`;
-    s += `<g data-y="${L.bed.cy + 3}" transform="translate(${L.bed.cx},${L.bed.cy})">${bed.front}</g>`;
-    if (p.lamp) s += `<g data-y="${L.lamp.y}" id="floorLamp" transform="translate(${L.lamp.x},${L.lamp.y})">${A.lamp(p.lamp)}</g>`;
-    s += `<g data-y="${L.bowls.fy}" id="bowlFood" transform="translate(${L.bowls.fx},${L.bowls.fy})"></g><g data-y="${L.bowls.wy}" id="bowlWater" transform="translate(${L.bowls.wx},${L.bowls.wy})"></g>`;
-    S.house.owned.filter((id) => id.indexOf('toy_') === 0).forEach((id) => {
-      const pos = L.toys[id];
-      if (pos) s += `<g class="toy" data-toy="${id}" data-y="${pos.y}" transform="translate(${pos.x},${pos.y})">${A.toy(id)}</g>`;
+    const S = B.S, p = S.house.placed, pos = S.house.pos || {}, stored = S.house.stored || [];
+    // Mọi món trên sàn đều mang data-obj để trình sắp xếp phòng chọn, kéo, lật, đổi cỡ được
+    const tf = (key, x, y, dy) => { const o = pos[key] || {}, sc = o.s || 1; return `data-obj="${key}" data-y="${y + (dy || 0)}" transform="translate(${x},${y}) scale(${((o.f ? -1 : 1) * sc).toFixed(2)},${sc.toFixed(2)})"`; };
+    let s = p.rug ? `<g id="rugG" data-obj="rug" ${tf('rug', L.rug.cx, L.rug.cy).replace(/data-obj="rug" /, '')}>${A.rug(p.rug, L.rug.rx, L.rug.ry)}</g>` : '<g id="rugG"></g>';
+    s += '<g id="sorted">';
+    if (p.bed) {
+      const bed = A.bed(p.bed);
+      s += `<g ${tf('bed', L.bed.cx, L.bed.cy, -3)}><ellipse cx="0" cy="16" rx="142" ry="14" fill="#000" opacity=".1"/>${bed.back}</g>`;
+      s += `<g ${tf('bed', L.bed.cx, L.bed.cy, 3)}>${bed.front}</g>`;
+    }
+    if (p.lamp) s += `<g id="floorLamp" ${tf('lamp', L.lamp.x, L.lamp.y)}>${A.lamp(p.lamp)}</g>`;
+    s += `<g id="bowlFood" ${tf('bowlFood', L.bowls.fx, L.bowls.fy)}></g><g id="bowlWater" ${tf('bowlWater', L.bowls.wx, L.bowls.wy)}></g>`;
+    S.house.owned.filter((id) => id.indexOf('toy_') === 0 && stored.indexOf(id) < 0).forEach((id) => {
+      const q = L.toys[id];
+      if (q) s += `<g class="toy" data-toy="${id}" ${tf(id, q.x, q.y)}>${A.toy(id)}</g>`;
     });
-    if (p.plant) s += `<g data-y="${L.plant.y}" transform="translate(${L.plant.x},${L.plant.y})">${A.plant(p.plant)}</g>`;
+    if (p.plant) s += `<g ${tf('plant', L.plant.x, L.plant.y)}>${A.plant(p.plant)}</g>`;
+    // Đồ riêng của các bạn, mỗi bạn một góc
+    if (B.pets && B.pets.objects) B.pets.objects(L).forEach((o) => (s += `<g class="pet-obj" data-owner="${o.pet.id}" ${tf(o.key, o.x, o.y)}>${o.html}</g>`));
     s += (B.friends ? B.friends.svg() : '') + A.bun({ id: 'bun', outfit: S.bun.outfit }) + '</g>';
     return s;
   }
@@ -387,7 +406,8 @@
       window: { x: L.win.cx, y: 598 },
       desk: { x: L.desk.x + L.desk.w / 2 + 34, y: 606 },
       rug: { x: L.rug.cx, y: L.rug.cy + 8 },
-      bed: { x: L.bed.cx, y: L.bed.cy },
+      // Chưa có giường (đã cất vào kho) thì Bun ngủ trên thảm
+      bed: B.S.house.placed.bed ? { x: L.bed.cx, y: L.bed.cy } : { x: L.rug.cx + 40, y: L.rug.cy + 10 },
       food: { x: L.bowls.fx + 96, y: L.bowls.fy - 6 },
       water: { x: L.bowls.wx + 96, y: L.bowls.wy - 6 },
       front: { x: Math.round(L.W * 0.5), y: 744 },
@@ -395,5 +415,5 @@
     };
   }
 
-  B.scene = { build, updateLight, updateBowls, updateJar, sortAll, placeBun, moveToy, toScreen, fromScreen, spots, weather, season, layout: () => L, light: () => lightState, mix };
+  B.scene = { build, updateLight, updateBowls, updateJar, sortAll, placeBun, moveToy, toScreen, fromScreen, spots, weather, season, layout: () => L, light: () => lightState, mix, sky: (h) => sample(h) };
 })();
