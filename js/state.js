@@ -2,8 +2,10 @@
 (function () {
   'use strict';
   const B = window.B;
-  const KEY = 'hien-nha-bun:v1';
-  const BACKUP = KEY + ':backup';
+  // Ngăn lưu của khách giữ nguyên tên cũ để dữ liệu sẵn có không bị ảnh hưởng.
+  // Khi đăng nhập, mỗi tài khoản có một ngăn đệm riêng trên máy (xem account.js).
+  const GUEST_KEY = 'hien-nha-bun:v1';
+  let KEY = GUEST_KEY, BACKUP = KEY + ':backup';
   const HOUR = 3600000, DAY = 86400000;
 
   /* ---------- Tiện ích ---------- */
@@ -127,7 +129,14 @@
   /* ---------- Lưu trữ ---------- */
   let saveTimer = null;
   B.store = {
-    KEY,
+    GUEST_KEY,
+    get KEY() { return KEY; },
+    // Chọn ngăn lưu trước khi load()
+    use(key) { KEY = key || GUEST_KEY; BACKUP = KEY + ':backup'; },
+    defaults,
+    // Đọc và chuẩn hóa một trạng thái thô (dùng khi chuyển dữ liệu, tải từ tài khoản)
+    normalize(s) { merge(s, defaults()); if (!Array.isArray(s.habit.hours) || s.habit.hours.length !== 24) s.habit.hours = new Array(24).fill(0); migrate(s); return s; },
+    peek(key) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch (e) { return null; } },
     load() {
       let S = null, raw = null;
       try { raw = localStorage.getItem(KEY); } catch (e) { /* trình duyệt chặn lưu trữ */ }
@@ -149,7 +158,10 @@
     },
     saveNow() {
       clearTimeout(saveTimer);
-      try { localStorage.setItem(KEY, JSON.stringify(B.S)); return true; } catch (e) { B.emit('saveError', e); return false; }
+      if (B.skipSave) return false;
+      try { localStorage.setItem(KEY, JSON.stringify(B.S)); } catch (e) { B.emit('saveError', e); return false; }
+      B.emit('saved');
+      return true;
     },
     backup() {
       try { localStorage.setItem(BACKUP, JSON.stringify(B.S)); } catch (e) { /* bỏ qua */ }
@@ -183,18 +195,24 @@
   };
 
   /* ---------- Xu ---------- */
-  B.earn = (n) => {
+  // Mỗi thay đổi số xu phát sự kiện 'coin' với đúng phần chênh lệch. Khi có tài khoản, sync.js
+  // ghi chúng vào sổ xu trên máy chủ; id cố định (vd. "ach:...") giúp một phần thưởng chỉ được cộng một lần.
+  const coinEvt = (delta, kind, id) => { if (delta) B.emit('coin', { delta, kind, id: id || null }); };
+  B.earn = (n, id) => {
     const S = B.S;
     n = Math.max(0, Math.round(n));
     if (!n) return 0;
     S.day.coinsEarned += n; S.totals.coinsEarned += n;
     const pay = Math.min(S.debt, n);
     S.debt -= pay; S.coins += n - pay;
+    coinEvt(n - pay, 'earn', id);
     return n;
   };
   B.spend = (n) => {
+    n = Math.round(n);
     if (B.S.coins < n) return false;
     B.S.coins -= n;
+    coinEvt(-n, 'spend');
     return true;
   };
   // Thu hồi thưởng khi bỏ đánh dấu; phần thiếu ghi nợ để không thể "cày" bằng cách bật tắt
@@ -202,6 +220,7 @@
     const S = B.S;
     const take = Math.min(S.coins, n);
     S.coins -= take; S.debt += n - take;
+    coinEvt(-take, 'refund');
     S.day.coinsEarned = Math.max(0, S.day.coinsEarned - n); S.totals.coinsEarned = Math.max(0, S.totals.coinsEarned - n);
   };
 
@@ -473,7 +492,7 @@
         if (!ok) return;
         S.achievements[a.id] = B.now();
         const r = a.reward || {};
-        if (r.coins) B.earn(r.coins);
+        if (r.coins) B.earn(r.coins, 'ach:' + a.id);
         if (r.ticket) S.tickets = Math.min(3, S.tickets + r.ticket);
         if (r.trophy && S.house.trophies.indexOf(r.trophy) < 0) S.house.trophies.push(r.trophy);
         B.mem.add({ key: 'ach_' + a.id, icon: 'star', title: `Thành tích: ${a.name}`, text: a.desc + '.' });

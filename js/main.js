@@ -137,7 +137,14 @@
     lastSize = (() => { const r = document.getElementById('scene').getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); })();
     if (window.ResizeObserver) new ResizeObserver(onSize).observe(document.getElementById('scene'));
     window.addEventListener('resize', onSize);
+    if (B.account) B.account.afterBoot();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  // Trước khi dựng nhà: chọn khách hay tài khoản (cổng chào chỉ hiện với người mới hoặc sau khi đăng xuất)
+  function start() {
+    const go = () => { try { boot(); } catch (e) { console.error(e); } };
+    if (!B.account) return go();
+    B.account.boot().then(go, (e) => { console.error(e); go(); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();

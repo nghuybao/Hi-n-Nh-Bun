@@ -287,6 +287,7 @@
   }
 
   /* ---------- Cài đặt ---------- */
+  const acctMode = () => !!(B.account && B.account.mode === 'account');
   function hourLabel(h) { return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`; }
   function settingsHTML() {
     const S = B.S, r = S.settings.rest, restOn = B.rest.activeAt(B.now());
@@ -295,14 +296,16 @@
       <div class="set-sec"><h3>Chế độ nghỉ</h3><p>Khi bạn bận, đi xa hoặc cần nghỉ, bà sẽ sang trông Bun. Chỉ số được giữ ổn định, chuỗi ngày không bị đứt.</p>
         ${restOn ? `<div class="row"><span class="tags"><span>Bà đang trông Bun${r.until ? ` đến ${U.fmtDateTime(r.until)}` : ''}</span></span><span class="grow"></span><button class="btn primary sm" data-rest="off">Mình về rồi</button></div>`
         : `<div class="row"><select id="restDays" aria-label="Thời gian nghỉ"><option value="0">Đến khi mình quay lại</option><option value="1">1 ngày</option><option value="3">3 ngày</option><option value="7">7 ngày</option><option value="14">14 ngày</option></select><span class="grow"></span><button class="btn soft sm" data-rest="on">Nhờ bà trông Bun</button></div>`}</div>
-      <div class="set-sec"><h3>Sao lưu dữ liệu</h3><p>Dữ liệu được lưu ngay trong trình duyệt của máy này. Hãy xuất một tệp sao lưu thỉnh thoảng, nhất là trước khi xóa dữ liệu trình duyệt hoặc đổi máy.</p>
+      ${B.account ? `<div class="set-sec"><h3>Tài khoản và đồng bộ</h3><p>${esc(B.account.mode === 'account' ? `Đã đăng nhập${B.account.email ? ': ' + B.account.email : ''}. ${B.account.statusText()}` : B.account.statusText())}</p>
+        <div class="row"><button class="btn soft sm" data-account>${ic('cloud')}${B.account.mode === 'account' ? 'Quản lý tài khoản' : 'Đồng bộ và lưu tài khoản'}</button></div></div>` : ''}
+      <div class="set-sec"><h3>Sao lưu dữ liệu</h3><p>${B.account && B.account.mode === 'account' ? 'Dữ liệu được lưu trên tài khoản và giữ một bản trên máy này.' : 'Dữ liệu được lưu ngay trong trình duyệt của máy này.'} Hãy xuất một tệp sao lưu thỉnh thoảng, nhất là trước khi xóa dữ liệu trình duyệt hoặc đổi máy.</p>
         <div class="row"><button class="btn soft sm" data-export>${ic('download')}Xuất tệp sao lưu</button><button class="btn soft sm" data-import>${ic('upload')}Nhập từ tệp</button></div></div>
       <div class="set-sec"><h3>Hiển thị</h3>
         <label for="hourPrev" style="font-size:13.5px">Xem thử ánh sáng trong ngày: <b id="hourLbl">${B.time.preview != null ? hourLabel(B.time.preview) : 'giờ thật'}</b></label>
         <input type="range" id="hourPrev" min="0" max="23.75" step="0.25" value="${B.time.preview != null ? B.time.preview : B.time.hour().toFixed(2)}">
         <div class="row" style="margin:6px 0 10px"><select id="wxPrev" aria-label="Xem thử thời tiết"><option value="">Thời tiết tự nhiên</option><option value="clear" ${B.time.weatherPreview === 'clear' ? 'selected' : ''}>Trời quang</option><option value="cloudy" ${B.time.weatherPreview === 'cloudy' ? 'selected' : ''}>Nhiều mây</option><option value="rain" ${B.time.weatherPreview === 'rain' ? 'selected' : ''}>Mưa</option></select><button class="btn ghost sm" data-realtime>Về giờ thật</button></div>
         <label class="check"><input type="checkbox" id="reduceMotion" ${S.settings.reduceMotion ? 'checked' : ''}>Giảm chuyển động</label></div>
-      <div class="set-sec"><h3>Bắt đầu lại</h3><p>Xóa toàn bộ dữ liệu trên máy này: công việc, xu, đồ đạc, kỷ niệm và mọi thế hệ Bun.</p><button class="btn ghost sm" data-reset style="color:#C0483E">${ic('trash')}Xóa toàn bộ dữ liệu</button></div>`;
+      <div class="set-sec"><h3>Bắt đầu lại</h3><p>${acctMode() ? 'Đưa thế giới trên tài khoản về ngày đầu, áp dụng cho mọi thiết bị: công việc, xu, đồ đạc, kỷ niệm và mọi thế hệ Bun.' : 'Xóa toàn bộ dữ liệu trên máy này: công việc, xu, đồ đạc, kỷ niệm và mọi thế hệ Bun.'}</p><button class="btn ghost sm" data-reset style="color:#C0483E">${ic('trash')}Xóa toàn bộ dữ liệu</button></div>`;
   }
   function doExport() {
     B.store.saveNow();
@@ -318,8 +321,10 @@
   function importFromText(text) {
     let s, photos = [];
     try { s = B.store.parseImport(text); photos = JSON.parse(text).photos || []; } catch (err) { return toast(esc(err.message), { icon: 'x', ms: 6000 }); }
-    return confirmBox('Nhập dữ liệu từ tệp?', `Tệp này có ${s.tasks.length} việc đang mở, ${s.coins || 0} xu, Bun đời thứ ${(s.bun && s.bun.gen) || 1}${photos.length ? `, ${photos.length} ảnh` : ''}. Dữ liệu hiện tại trên máy sẽ bị thay thế.`, 'Thay thế', true).then((ok) => {
+    const acct = acctMode();
+    return confirmBox('Nhập dữ liệu từ tệp?', `Tệp này có ${s.tasks.length} việc đang mở, ${s.coins || 0} xu, Bun đời thứ ${(s.bun && s.bun.gen) || 1}${photos.length ? `, ${photos.length} ảnh` : ''}. ${acct ? 'Dữ liệu trên tài khoản sẽ bị thay thế trên mọi thiết bị. Số xu vẫn giữ theo sổ xu của tài khoản.' : 'Dữ liệu hiện tại trên máy sẽ bị thay thế.'}`, 'Thay thế', true).then((ok) => {
       if (!ok) return;
+      if (acct) return B.account.importWorld(s, photos);
       if (!B.store.applyImport(s)) return toast('Không lưu được dữ liệu vừa nhập.', { icon: 'x' });
       B.skipSave = true;
       return B.photos.importAll(photos).then(() => location.reload());
@@ -341,7 +346,11 @@
       if (t.closest('[data-export]')) return doExport();
       if (t.closest('[data-import]')) return $('#importFile').click();
       if (t.closest('[data-realtime]')) { B.time.preview = null; B.time.weatherPreview = null; B.scene.updateLight(); renderHud(); return draw(); }
-      if (t.closest('[data-reset]')) confirmBox('Xóa toàn bộ dữ liệu?', 'Mọi thứ sẽ trở về ngày đầu tiên và không thể khôi phục, trừ khi bạn đã xuất tệp sao lưu.', 'Xóa hết', true).then((ok) => { if (ok) { B.skipSave = true; B.store.reset(); B.photos.clearAll().then(() => location.reload()); } });
+      if (t.closest('[data-account]')) { m.close(); return B.account.open(); }
+      if (t.closest('[data-reset]')) {
+        if (acctMode()) return confirmBox('Bắt đầu lại trên tài khoản?', 'Mọi thứ trên tài khoản sẽ trở về ngày đầu tiên trên mọi thiết bị, số xu về 60. Không thể khôi phục, trừ khi bạn đã xuất tệp sao lưu.', 'Xóa hết', true).then((ok) => ok && B.account.resetWorld());
+        confirmBox('Xóa toàn bộ dữ liệu?', 'Mọi thứ sẽ trở về ngày đầu tiên và không thể khôi phục, trừ khi bạn đã xuất tệp sao lưu.', 'Xóa hết', true).then((ok) => { if (ok) { B.skipSave = true; B.store.reset(); B.photos.clearAll().then(() => location.reload()); } });
+      }
     });
     m.body.addEventListener('input', (e) => {
       if (e.target.id === 'hourPrev') { B.time.preview = +e.target.value; $('#hourLbl', m.body).textContent = hourLabel(B.time.preview); B.scene.updateLight(); renderHud(); }

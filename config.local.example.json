@@ -1,0 +1,5 @@
+{
+  "_ghi_chu": "Chép tệp này thành config.local.json (đã được .gitignore bỏ qua) để chạy thử đăng nhập trên máy bằng Mở Hiên Nhà Bun.cmd. Chỉ dùng URL và khóa publishable/anon của dự án Supabase dùng để phát triển. Không bao giờ dán khóa service_role hay sb_secret_ vào đây.",
+  "url": "https://YOUR-DEV-PROJECT.supabase.co",
+  "key": "sb_publishable_XXXXXXXXXXXXXXXX"
+}

@@ -160,18 +160,18 @@
       if (bumpStreak(today) && !S.day.bonus.streak) {
         S.day.bonus.streak = true;
         const c = Math.min(20, S.streak.current * 2);
-        B.earn(c); bonuses.push({ label: `Chuỗi ${S.streak.current} ngày`, coins: c });
+        B.earn(c, `bonus:${today}:streak`); bonuses.push({ label: `Chuỗi ${S.streak.current} ngày`, coins: c });
         if ([3, 7, 14, 30, 50, 100].indexOf(S.streak.current) >= 0) B.mem.add({ key: 'streak_' + S.streak.current, icon: 'flame', title: `Chuỗi ${S.streak.current} ngày`, text: 'Mỗi ngày một chút, và Bun đều ở đó.' });
       }
       const st = B.tasks.stats(today);
       const sk = t.shift, sh = st[sk];
       if (sh.t >= 2 && sh.d === sh.t && !S.day.bonus[sk]) {
-        S.day.bonus[sk] = true; B.earn(R.shiftBonus);
+        S.day.bonus[sk] = true; B.earn(R.shiftBonus, `bonus:${today}:${sk}`);
         bonuses.push({ label: sk === 'am' ? 'Trọn ca sáng' : 'Trọn ca chiều tối', coins: R.shiftBonus });
       }
       let allDone = false;
       if (st.total >= 3 && st.done === st.total && !S.day.bonus.all) {
-        S.day.bonus.all = true; allDone = true; B.earn(R.allDoneBonus); S.totals.daysAllDone++;
+        S.day.bonus.all = true; allDone = true; B.earn(R.allDoneBonus, `bonus:${today}:all`); S.totals.daysAllDone++;
         bonuses.push({ label: 'Ngày trọn vẹn', coins: R.allDoneBonus });
         B.mem.add({ key: 'first_all_done', icon: 'star', title: 'Ngày trọn vẹn đầu tiên', text: `Hôm nay bạn hoàn thành cả ${st.total} việc. Bun chạy ba vòng quanh phòng để ăn mừng.` });
       }
@@ -283,7 +283,7 @@
       if (S.day.eveningDone) return false;
       S.day.eveningDone = true;
       const s = B.tasks.summary();
-      B.earn(5); B.care();
+      B.earn(5, `ritual:${S.day.date}:evening`); B.care();
       const txt = !s.total ? 'Một ngày thong thả. Bun nằm bên cửa sổ gần hết buổi chiều.' : s.rate >= 1 ? `Bạn làm xong cả ${s.total} việc. Bun đi ngủ với cái đuôi vẫn còn vẫy.` : `Bạn làm xong ${s.done}/${s.total} việc. Bun nói như vậy là đã cố gắng rồi.`;
       B.mem.add({ icon: 'moon', title: `Nhật ký ${U.fmtDate(s.date, true)}`, text: txt });
       B.store.save(); B.emit('change');
@@ -293,7 +293,7 @@
       const S = B.S;
       if (S.day.morningDone) return false;
       S.day.morningDone = true;
-      B.earn(5); B.care();
+      B.earn(5, `ritual:${S.day.date}:morning`); B.care();
       B.store.save(); B.emit('change');
       return true;
     },
@@ -301,7 +301,7 @@
       const S = B.S;
       if (S.day.noonDone) return false;
       S.day.noonDone = true;
-      B.earn(5); B.care();
+      B.earn(5, `ritual:${S.day.date}:noon`); B.care();
       B.store.save(); B.emit('change');
       return true;
     },
@@ -323,7 +323,7 @@
     const coins = Math.round((Math.min(mins, capLeft) / 5) * R.focusCoinPer5);
     S.day.focusMin += mins; S.totals.focusMin += mins; S.totals.focusSessions++; S.bun.counters.focusMin += mins;
     S.habit.hours[new Date(f.startAt).getHours()]++;
-    if (coins) B.earn(coins);
+    if (coins) B.earn(coins, `focus:${f.startAt}`);
     S.bun.stats.joy = U.clamp(S.bun.stats.joy + 8, 0, 100);
     B.addBond(4); B.care();
     B.mem.add({ key: 'first_focus', icon: 'timer', title: 'Lần đầu ngồi cùng nhau', text: `${mins} phút bạn làm việc, Bun nằm im bên chân bàn không rời nửa bước.` });

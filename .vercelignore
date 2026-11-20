@@ -1,0 +1,9 @@
+# Không đưa lên Vercel: công cụ chạy cục bộ, kiểm thử, lược đồ cơ sở dữ liệu, tài liệu
+tools/
+tests/
+supabase/
+docs/
+.claude/
+config.local.json
+config.local.example.json
+*.cmd

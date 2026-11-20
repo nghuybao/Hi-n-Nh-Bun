@@ -74,7 +74,7 @@
           urls[id] = URL.createObjectURL(r.blob);
           const p = { id, ar: +U.clamp(r.ar, 0.5, 2).toFixed(3), x: 0.1 + (n % 5) * 0.2, y: 0.22 + (Math.floor(n / 5) % 2) * 0.42, size: 'm', caption: '', date: B.time.today(), rot: +U.rand(-3, 3).toFixed(1) };
           S.photos.push(p);
-          B.store.save();
+          B.store.save(); B.emit('photo', { type: 'add', id });
           return p;
         });
       });
@@ -82,12 +82,12 @@
     replace(id, file) {
       const p = B.S.photos.find((x) => x.id === id);
       if (!p) return Promise.reject(new Error('Không tìm thấy ảnh.'));
-      return shrink(file).then((r) => put(id, r.blob).then(() => { if (urls[id]) URL.revokeObjectURL(urls[id]); urls[id] = URL.createObjectURL(r.blob); p.ar = +U.clamp(r.ar, 0.5, 2).toFixed(3); B.store.save(); return p; }));
+      return shrink(file).then((r) => put(id, r.blob).then(() => { if (urls[id]) URL.revokeObjectURL(urls[id]); urls[id] = URL.createObjectURL(r.blob); p.ar = +U.clamp(r.ar, 0.5, 2).toFixed(3); B.store.save(); B.emit('photo', { type: 'replace', id }); return p; }));
     },
     remove(id) {
       B.S.photos = B.S.photos.filter((x) => x.id !== id);
       if (urls[id]) { URL.revokeObjectURL(urls[id]); delete urls[id]; }
-      B.store.save();
+      B.store.save(); B.emit('photo', { type: 'remove', id });
       return del(id).catch(() => {});
     },
     clearAll: () => Promise.all([tx('readwrite', (s) => s.clear()), tx('readwrite', (s) => s.clear(), 'audio')]).catch(() => {}),
